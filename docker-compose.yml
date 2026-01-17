@@ -14,6 +14,8 @@ services:
       - HOST=0.0.0.0
       - PORT=8456
       - FRP_DASHBOARD_URL=http://frps:7500
+    ports:
+      - "127.0.0.1:8456:8456"
     networks:
       - internal
 
