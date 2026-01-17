@@ -2,16 +2,19 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-RUN npm install -g pnpm && \
-    apk add --no-cache wireguard-tools
+RUN npm install -g pnpm
 
-# Install dependencies first (cached)
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install
 
-# Copy source
 COPY . .
 
-EXPOSE 5173
+RUN pnpm build
 
-CMD ["pnpm", "dev", "--host"]
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=8456
+
+EXPOSE 8456
+
+CMD ["node", "build"]
