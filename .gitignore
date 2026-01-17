@@ -19,7 +19,7 @@ Thumbs.db
 # Configuration & Data (Sensitive)
 # We want to ignore the actual config files but maybe keep the folder structure?
 # For now, safest to ignore the contents as they contain keys/secrets.
-config/
+/config/
 data/
 
 # Logs
