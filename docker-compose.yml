@@ -13,7 +13,7 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=8456
-      - FRP_DASHBOARD_URL=http://frps:7500
+      - FRP_DASHBOARD_URL=http://172.17.0.1:7500
     ports:
       - target: 8456
         published: 8456
@@ -52,9 +52,6 @@ services:
     network_mode: host
     volumes:
       - ./config/frp:/etc/frp
-    # The 'ports' section is removed when using network_mode: host
-    # The 'networks' section is removed when using network_mode: host
-    # 'driver: bridge' is not a valid property for a service definition.
 
 networks:
   internal:
