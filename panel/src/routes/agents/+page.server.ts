@@ -1,4 +1,4 @@
-import { getAgents, createEnrollmentKey } from '$lib/server/agents';
+import { getAgents, createEnrollmentKey, saveAgents } from '$lib/server/agents';
 import { fail } from '@sveltejs/kit';
 
 export const load = async () => {
@@ -17,5 +17,20 @@ export const actions = {
             console.error(e);
             return fail(500, { error: 'Failed to create key' });
         }
+    },
+
+    delete: async ({ request }) => {
+        const data = await request.formData();
+        const id = data.get('id') as string;
+
+        if (!id) {
+            return fail(400, { error: 'Agent ID required' });
+        }
+
+        let agents = await getAgents();
+        agents = agents.filter(a => a.id !== id);
+        await saveAgents(agents);
+
+        return { success: true };
     }
 };
