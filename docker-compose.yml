@@ -49,14 +49,12 @@ services:
     image: snowdreamtech/frps:latest
     container_name: petalport-frps
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./config/frp:/etc/frp
-    ports:
-      - "7000:7000"
-      - "7500:7500" # Internal/Dashboard
-    networks:
-      - internal
-      - public
+    # The 'ports' section is removed when using network_mode: host
+    # The 'networks' section is removed when using network_mode: host
+    # 'driver: bridge' is not a valid property for a service definition.
 
 networks:
   internal:
