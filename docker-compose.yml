@@ -21,6 +21,7 @@ services:
         mode: host
     networks:
       - internal
+      - public
 
   wireguard:
     image: linuxserver/wireguard:latest
