@@ -88,16 +88,18 @@
             <p class="text-gray-600 dark:text-gray-300 mb-6">Run the following command on your edge device/server to deploy the agent:</p>
             
             <div class="relative mb-6">
-                <pre class="bg-gray-900 text-gray-100 p-6 rounded-lg overflow-x-auto text-sm font-mono custom-scrollbar">{`docker run -d \\
+                <pre class="bg-gray-900 text-gray-100 p-6 rounded-lg overflow-x-auto text-sm font-mono custom-scrollbar">{`docker pull ghcr.io/petalcat/petalport-agent:latest
+
+docker run -d \\
   --name petalport-agent \\
   --restart unless-stopped \\
   --network host \\
   --cap-add NET_ADMIN \\
   -e PANEL_URL=${window.location.origin} \\
   -e ENROLL_KEY=${enrollmentKey} \\
-  ghcr.io/your-username/petalport-agent:latest`}</pre>
+  ghcr.io/petalcat/petalport-agent:latest`}</pre>
                 <button 
-                    onclick={() => copyToClipboard(`docker run -d --name petalport-agent --restart unless-stopped --network host --cap-add NET_ADMIN -e PANEL_URL=${window.location.origin} -e ENROLL_KEY=${enrollmentKey} ghcr.io/your-username/petalport-agent:latest`)}
+                    onclick={() => copyToClipboard(`docker pull ghcr.io/petalcat/petalport-agent:latest\n\ndocker run -d --name petalport-agent --restart unless-stopped --network host --cap-add NET_ADMIN -e PANEL_URL=${window.location.origin} -e ENROLL_KEY=${enrollmentKey} ghcr.io/petalcat/petalport-agent:latest`)}
                     class="absolute top-4 right-4 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded opacity-90 transition-opacity"
                     aria-label="Copy Command"
                 >

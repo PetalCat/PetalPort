@@ -14,13 +14,34 @@ PetalPort is a self-hosted overlay network controller that provides a secure Con
 
 Deploy PetalPort on your VPS or heavy edge node.
 
-1. **Configure Environment**:
-   Ensure your `.env` (or environment variables) are set if using Cloudflare Tunnels, though the core stack works standalone.
+### 1. Prerequisites
+- A Linux VPS (Ubuntu 22.04 recommended)
+- Docker & Docker Compose installed:
+  ```bash
+  curl -fsSL https://get.docker.com | sh
+  ```
 
-2. **Start the Stack**:
-   ```bash
-   docker-compose up -d --build
-   ```
+### 2. Setup
+Clone the repository and enter the directory:
+```bash
+git clone https://github.com/your-username/PetalPort.git
+cd PetalPort
+```
+
+### 3. Start the Stack
+Run the controller stack in detached mode:
+```bash
+docker-compose up -d --build
+```
+
+### 4. Firewall Configuration (UFW)
+Ensure the following ports are open:
+```bash
+ufw allow 8456/tcp comment 'PetalPort Panel'
+ufw allow 7000/tcp comment 'FRP Server'
+ufw allow 443/udp comment 'WireGuard VPN'
+ufw enable
+```
 
 3. **Access the Panel**:
    - URL: `http://your-server-ip:8456`
