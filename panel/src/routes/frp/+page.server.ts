@@ -17,11 +17,12 @@ export const actions = {
     create: async ({ request }) => {
         const data = await request.formData();
         const name = data.get('name') as string;
+        const localPort = parseInt(data.get('localPort') as string);
         const bindPort = parseInt(data.get('bindPort') as string);
         const type = data.get('type') as 'tcp' | 'udp';
         const agentId = data.get('agentId') as string;
 
-        if (!name || !bindPort || !type || !agentId) {
+        if (!name || !localPort || !bindPort || !type || !agentId) {
             return fail(400, { missing: true });
         }
 
@@ -35,6 +36,8 @@ export const actions = {
             id: randomUUID(),
             name,
             type,
+            localIp: '127.0.0.1',  // Default to localhost on agent
+            localPort,
             bindPort,
             agentId
         };

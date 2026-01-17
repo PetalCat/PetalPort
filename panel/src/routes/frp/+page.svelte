@@ -17,7 +17,7 @@
 <!-- Add Proxy Form -->
 <form method="POST" action="?/create" use:enhance class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-8 border border-gray-200 dark:border-gray-700">
     <h3 class="text-lg font-semibold mb-4 dark:text-white">New Tunnel</h3>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4">
         <div>
             <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
             <input 
@@ -45,8 +45,21 @@
                 <option value="udp">UDP</option>
             </select>
         </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
         <div>
-            <label for="bindPort" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Remote Port</label>
+            <label for="localPort" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Local Port (on Agent)</label>
+            <input 
+                id="localPort"
+                type="number" 
+                name="localPort" 
+                placeholder="e.g. 25565" 
+                required
+                class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+            />
+        </div>
+        <div>
+            <label for="bindPort" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Remote Port (on Server)</label>
             <input 
                 id="bindPort"
                 type="number" 
@@ -56,7 +69,7 @@
                 class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
             />
         </div>
-        <button type="submit" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors">
+        <button type="submit" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors h-fit">
             Create Tunnel
         </button>
     </div>

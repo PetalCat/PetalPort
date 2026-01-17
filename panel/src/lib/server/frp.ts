@@ -13,7 +13,9 @@ export interface ProxyRule {
     id: string;
     name: string;
     type: 'tcp' | 'udp';
-    bindPort: number;
+    localIp: string;     // IP on the agent to forward from (usually 127.0.0.1)
+    localPort: number;   // Port on the agent to forward from
+    bindPort: number;    // Port on the server to expose
     description?: string;
     token?: string; // Optional per-proxy token
     agentId?: string; // ID of the agent running this tunnel
@@ -103,8 +105,8 @@ server_port = ${serverPort}
     for (const p of agentProxies) {
         config += `[${p.name}]
 type = ${p.type}
-local_ip = 127.0.0.1
-local_port = 80
+local_ip = ${p.localIp || '127.0.0.1'}
+local_port = ${p.localPort}
 remote_port = ${p.bindPort}
 
 `;
