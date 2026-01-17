@@ -6,19 +6,16 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
  * Run a UFW command on the host via a privileged Docker container
  */
 async function runUfwCommand(command: string): Promise<string> {
+    // We use nsenter to run the command in the host's namespaces.
+    // This avoids dependency issues (like python missing for ufw) by using the host's binaries and environment.
     const container = await docker.createContainer({
         Image: 'alpine:latest',
-        Cmd: ['sh', '-c', command],
+        // Install util-linux to get nsenter, then execute command on host (pid 1)
+        Cmd: ['sh', '-c', `apk add --no-cache util-linux && nsenter -t 1 -m -u -n -i -- sh -c "${command}"`],
         HostConfig: {
             AutoRemove: true,
-            NetworkMode: 'host',
             Privileged: true,
-            Binds: [
-                '/usr/sbin/ufw:/usr/sbin/ufw:ro',
-                '/etc/ufw:/etc/ufw:rw',
-                '/lib:/lib:ro',
-                '/usr/lib:/usr/lib:ro'
-            ]
+            PidMode: 'host'
         }
     });
 
