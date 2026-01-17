@@ -12,14 +12,29 @@
 <form method="POST" use:enhance class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 max-w-2xl">
     <div class="space-y-6">
         <div>
-            <label for="serverEndpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Public Server Endpoint</label>
-            <p class="text-xs text-gray-500 mb-2">The public IP or domain of this VPS (used for WireGuard client configs).</p>
+            <label for="serverEndpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">WireGuard Endpoint</label>
+            <p class="text-xs text-gray-500 mb-2">Public IP:Port for WireGuard VPN clients (e.g., 192.0.2.1:51820).</p>
             <input 
                 id="serverEndpoint"
                 type="text" 
                 name="serverEndpoint" 
                 value={data.settings.serverEndpoint}
                 required
+                placeholder="192.0.2.1:51820"
+                class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+        </div>
+
+        <div>
+            <label for="frpServerAddr" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">FRP Server Address</label>
+            <p class="text-xs text-gray-500 mb-2">Public IP or hostname where agents connect to FRP (e.g., 192.0.2.1). Port 7000 is used by default.</p>
+            <input 
+                id="frpServerAddr"
+                type="text" 
+                name="frpServerAddr" 
+                value={data.settings.frpServerAddr || ''}
+                required
+                placeholder="192.0.2.1"
                 class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
         </div>

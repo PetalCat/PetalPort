@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ request }) => {
     }
 
     const settings = await getSettings();
-    const serverAddr = settings.serverEndpoint.split(':')[0]; // Hostname only
+    const serverAddr = settings.frpServerAddr || settings.serverEndpoint.split(':')[0]; // FRP server address
     // Use configured FRP port or default 7000
     const serverPort = settings.frpServerPort || 7000;
 

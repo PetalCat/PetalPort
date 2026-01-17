@@ -6,13 +6,15 @@ const CONFIG_ROOT = env.CONFIG_ROOT || '/config';
 const SETTINGS_FILE = path.join(CONFIG_ROOT, 'settings.json');
 
 export interface SystemSettings {
-    serverEndpoint: string;
+    serverEndpoint: string;      // WireGuard endpoint (IP:port for VPN clients)
+    frpServerAddr: string;       // FRP server address (IP for agent connections)
     frpAuthToken?: string;
     frpServerPort: number;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
     serverEndpoint: 'vpn.example.com:51820',
+    frpServerAddr: 'vpn.example.com',
     frpServerPort: 7000
 };
 

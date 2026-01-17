@@ -13,14 +13,16 @@ export const actions = {
     default: async ({ request }) => {
         const data = await request.formData();
         const serverEndpoint = data.get('serverEndpoint') as string;
+        const frpServerAddr = data.get('frpServerAddr') as string;
         const frpAuthToken = data.get('frpAuthToken') as string;
 
-        if (!serverEndpoint) {
+        if (!serverEndpoint || !frpServerAddr) {
             return fail(400, { missing: true });
         }
 
         const updated = await updateSettings({
             serverEndpoint,
+            frpServerAddr,
             frpAuthToken: frpAuthToken || undefined
         });
 
