@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# SvelteKit build output
+.svelte-kit/
+build/
+.output/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Configuration & Data (Sensitive)
+# We want to ignore the actual config files but maybe keep the folder structure?
+# For now, safest to ignore the contents as they contain keys/secrets.
+config/
+data/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

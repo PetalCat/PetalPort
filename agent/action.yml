@@ -1,0 +1,27 @@
+name: "PetalPort Agent"
+description: "Connect to a PetalPort server to expose services from GitHub Actions"
+inputs:
+  panel-url:
+    description: "URL of the PetalPort Panel (e.g. http://vpn.example.com:8456)"
+    required: true
+  enroll-key:
+    description: "One-time Enrollment Key generated from the Panel"
+    required: true
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  env:
+    PANEL_URL: ${{ inputs.panel-url }}
+    ENROLL_KEY: ${{ inputs.enroll-key }}
+networking:
+  # Allows the container to access the host (the runner) services if mapped
+  # But GitHub Actions networking is tricky.
+  # 'host' network mode is not default for actions.
+  # We might need to rely on the agent exposing things via specialized setup.
+  # For now, this starts the agent.
+  # WireGuard/FRP inside Docker Config:
+  # The Dockerfile uses `npm start` which runs the wrapper.
+  # The wrapper starts FRPC.
+  # FRPC connects to Server.
+  # Tunnel opens.
+  pass: true

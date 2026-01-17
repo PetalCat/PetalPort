@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+  panel:
+    build: ./panel
+    container_name: petalport-panel
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/wireguard:/config/wireguard
+      - ./config/frp:/config/frp
+      - ./panel:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PANEL_PORT=8456
+      - FRP_DASHBOARD_URL=http://frps:7500
+    ports:
+      - "8456:8456"
+    networks:
+      - internal
+
+  wireguard:
+    image: linuxserver/wireguard:latest
+    container_name: petalport-wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - ./config/wireguard:/config
+      - /lib/modules:/lib/modules
+    ports:
+      - "443:443/udp"
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+    networks:
+      - internal
+      - public
+
+  frps:
+    image: snowdreamtech/frps:latest
+    container_name: petalport-frps
+    restart: unless-stopped
+    volumes:
+      - ./config/frp/frps.toml:/etc/frp/frps.toml
+    ports:
+      - "7000:7000"
+      - "7500:7500" # Internal/Dashboard
+    networks:
+      - internal
+      - public
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: petalport-cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - internal
+
+networks:
+  internal:
+    internal: true
+  public:
+    driver: bridge
