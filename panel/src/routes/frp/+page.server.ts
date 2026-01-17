@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { getProxies, saveProxies, type ProxyRule } from '$lib/server/frp';
 import { getAgents } from '$lib/server/agents';
+import { allowPort, denyPort } from '$lib/server/firewall';
 import { randomUUID } from 'node:crypto';
 
 export const load = async () => {
@@ -45,6 +46,9 @@ export const actions = {
         proxies.push(newProxy);
         await saveProxies(proxies);
 
+        // Open firewall port
+        await allowPort(bindPort, `FRP: ${name}`);
+
         return { success: true };
     },
 
@@ -53,6 +57,13 @@ export const actions = {
         const id = data.get('id') as string;
 
         let proxies = await getProxies();
+        const toDelete = proxies.find(p => p.id === id);
+
+        if (toDelete) {
+            // Close firewall port
+            await denyPort(toDelete.bindPort);
+        }
+
         proxies = proxies.filter(p => p.id !== id);
         await saveProxies(proxies);
 
