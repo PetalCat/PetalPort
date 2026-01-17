@@ -47,7 +47,7 @@ services:
     container_name: petalport-frps
     restart: unless-stopped
     volumes:
-      - ./config/frp/frps.toml:/etc/frp/frps.toml
+      - ./config/frp:/etc/frp
     ports:
       - "7000:7000"
       - "7500:7500" # Internal/Dashboard
