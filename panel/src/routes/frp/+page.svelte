@@ -8,6 +8,17 @@
         navigator.clipboard.writeText(text);
         // Show toast?
     };
+
+    let showMigrateModal = $state(false);
+    let migrateProxyId = $state('');
+    let migrateProxyName = $state('');
+    let migrateTargetAgent = $state(''); // Unused locally, just for form? No, need to bind select potentially or just let form handle it.
+
+    const openMigrate = (id: string, name: string) => {
+        migrateProxyId = id;
+        migrateProxyName = name;
+        showMigrateModal = true;
+    };
 </script>
 
 <div class="flex justify-between items-center mb-8">
@@ -90,6 +101,10 @@
             </div>
             
             <div class="flex items-center gap-3">
+                
+                <button onclick={() => openMigrate(proxy.id, proxy.name)} class="text-gray-500 hover:text-blue-600 mr-2" title="Migrate" aria-label="Migrate">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                </button>
                 
                 <form method="POST" action="?/delete" use:enhance class="inline">
                     <input type="hidden" name="id" value={proxy.id} />

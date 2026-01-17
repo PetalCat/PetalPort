@@ -19,6 +19,10 @@ export interface Agent {
         version?: string;
     };
     configHash?: string; // Hash of last pushed config
+    stats?: {
+        rx: number; // bytes received
+        tx: number; // bytes sent
+    };
 }
 
 interface EnrollmentKey {
@@ -118,13 +122,25 @@ export const validateAgentToken = async (token: string): Promise<Agent | null> =
     return agents.find(a => a.token === token) || null;
 };
 
-export const updateAgentStatus = async (id: string, status: 'online' | 'offline', meta?: Agent['meta']) => {
+export const updateAgentStatus = async (id: string, status: 'online' | 'offline', meta?: Agent['meta'], stats?: Agent['stats']) => {
     const agents = await getAgents();
     const agent = agents.find(a => a.id === id);
     if (agent) {
         agent.status = status;
         agent.lastSeen = new Date().toISOString();
         if (meta) agent.meta = { ...agent.meta, ...meta };
+        if (stats) agent.stats = stats;
         await saveAgents(agents);
     }
+};
+
+export const renameAgent = async (id: string, name: string) => {
+    const agents = await getAgents();
+    const agent = agents.find(a => a.id === id);
+    if (agent) {
+        agent.name = name;
+        await saveAgents(agents);
+        return true;
+    }
+    return false;
 };

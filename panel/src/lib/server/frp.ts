@@ -95,6 +95,8 @@ export const generateAgentConfig = async (agentId: string, serverAddr: string, s
     let config = `[common]
 server_addr = ${serverAddr}
 server_port = ${serverPort}
+admin_addr = 127.0.0.1
+admin_port = 7400
 `;
 
     if (token) {
@@ -114,4 +116,35 @@ remote_port = ${p.bindPort}
     }
 
     return config;
+};
+
+export const deleteProxiesForAgent = async (agentId: string) => {
+    let proxies = await getProxies();
+    const agentProxies = proxies.filter(p => p.agentId === agentId);
+
+    // Clean up firewalls
+    for (const p of agentProxies) {
+        await denyPort(p.bindPort);
+    }
+
+    // Remove from list
+    proxies = proxies.filter(p => p.agentId !== agentId);
+    await saveProxies(proxies);
+};
+
+export const migrateProxy = async (proxyId: string, targetAgentId: string) => {
+    const proxies = await getProxies();
+    const proxy = proxies.find(p => p.id === proxyId);
+    if (!proxy) return false;
+
+    const oldAgentId = proxy.agentId;
+    proxy.agentId = targetAgentId;
+
+    await saveProxies(proxies);
+
+    // Notify both old and new agents
+    if (oldAgentId) emitToAgent(oldAgentId, 'config_updated', { timestamp: Date.now() });
+    emitToAgent(targetAgentId, 'config_updated', { timestamp: Date.now() });
+
+    return true;
 };

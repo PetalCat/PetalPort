@@ -1,5 +1,5 @@
 import { getProxies, syncConfig as syncFrp } from '$lib/server/frp';
-import { getPeers, syncConfig as syncWg } from '$lib/server/wireguard';
+import { getPeers, syncConfig as syncWg, ensureIdentity } from '$lib/server/wireguard';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '$env/dynamic/private';
@@ -24,6 +24,7 @@ const init = async () => {
     // Sync WG
     const peers = await getPeers();
     await syncWg(peers);
+    await ensureIdentity();
     console.log('[PetalPort] Verified wg0.conf');
 };
 

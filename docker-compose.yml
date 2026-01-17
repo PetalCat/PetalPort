@@ -7,8 +7,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./config/wireguard:/config/wireguard
-      - ./config/frp:/config/frp
+      - ./config:/config
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0

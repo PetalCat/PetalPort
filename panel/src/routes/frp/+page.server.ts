@@ -68,5 +68,25 @@ export const actions = {
         await saveProxies(proxies);
 
         return { success: true };
+    },
+
+    migrate: async ({ request }) => {
+        const data = await request.formData();
+        const id = data.get('id') as string;
+        const agentId = data.get('agentId') as string;
+
+        if (!id || !agentId) {
+            return fail(400, { missing: true });
+        }
+
+        // Import migrateProxy dynamically or move it to top imports
+        const { migrateProxy } = await import('$lib/server/frp');
+        const success = await migrateProxy(id, agentId);
+
+        if (!success) {
+            return fail(404, { error: 'Tunnel not found' });
+        }
+
+        return { success: true };
     }
 };

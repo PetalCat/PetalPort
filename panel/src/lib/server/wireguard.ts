@@ -58,6 +58,54 @@ export const generateKeyPair = async () => {
     }
 };
 
+export const getPublicKey = async (privateKey: string): Promise<string> => {
+    try {
+        const { stdout } = await execAsync(`echo '${privateKey.trim()}' | wg pubkey`);
+        return stdout.trim();
+    } catch (e) {
+        // Fallback using tweetnacl
+        const secretKey = new Uint8Array(Buffer.from(privateKey, 'base64'));
+        const keyPair = nacl.box.keyPair.fromSecretKey(secretKey);
+        return Buffer.from(keyPair.publicKey).toString('base64');
+    }
+};
+
+export const ensureIdentity = async () => {
+    const identityFile = path.join(CONFIG_DIR, 'identity.conf');
+    try {
+        await fs.access(identityFile);
+    } catch {
+        console.log('[PetalPort] Generating identity.conf...');
+        const { privateKey } = await generateKeyPair();
+
+        const serverPrivKey = env.WG_PRIVATE_KEY;
+        let serverPubKey = 'SERVER_PUB_KEY_PLACEHOLDER';
+
+        if (serverPrivKey) {
+            try {
+                serverPubKey = await getPublicKey(serverPrivKey);
+            } catch (e) {
+                console.error('Failed to derive server public key:', e);
+            }
+        }
+
+        const endpoint = env.SERVER_ENDPOINT || 'localhost:51820';
+
+        const content = `[Interface]
+PrivateKey = ${privateKey}
+Address = 10.13.13.2/24
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = ${serverPubKey}
+Endpoint = ${endpoint}
+AllowedIPs = 0.0.0.0/0, ::/0
+`;
+        await fs.writeFile(identityFile, content);
+        console.log('[PetalPort] Generated identity.conf');
+    }
+};
+
 export const syncConfig = async (peers: Peer[]) => {
     // Server config
     let config = `[Interface]

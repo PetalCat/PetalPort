@@ -151,6 +151,19 @@ function startSSE() {
         updateConfig();
     });
 
+    es.addEventListener('agent_deleted', (e) => {
+        console.warn('[Wrapper] Agent deleted by server. Self-destructing...');
+        // Remove token file
+        if (fs.existsSync(TOKEN_FILE)) {
+            fs.unlinkSync(TOKEN_FILE);
+        }
+        // Kill frpc
+        if (frpcProcess) frpcProcess.kill();
+
+        console.log('[Wrapper] Goodbye.');
+        process.exit(0);
+    });
+
     es.onerror = (e) => {
         console.error('[Wrapper] SSE Error. Reconnecting...');
         // EventSource autoconnects, but sometimes we need to force
@@ -160,11 +173,14 @@ function startSSE() {
 function startHeartbeat() {
     setInterval(async () => {
         try {
+            const stats = await getTrafficStats();
+
             await axios.post(`${PANEL_URL}/api/agent/status`, {
                 status: 'online',
                 meta: {
                     uptime: process.uptime()
-                }
+                },
+                stats
             }, {
                 headers: { 'Authorization': `Bearer ${agentToken}` }
             });
@@ -172,6 +188,31 @@ function startHeartbeat() {
             // silent fail
         }
     }, 30000); // 30s
+}
+
+async function getTrafficStats() {
+    try {
+        // FRPC admin API: http://127.0.0.1:7400/api/status
+        // We enabled this in frp.ts config generation
+        const res = await axios.get('http://127.0.0.1:7400/api/status');
+        // Structure: { tcp: [ { name, conf, today_traffic_in, today_traffic_out, cur_conns } ], ... }
+        // We want total sum
+        let rx = 0;
+        let tx = 0;
+
+        const types = ['tcp', 'udp', 'http', 'https', 'stcp', 'xtcp'];
+        for (const type of types) {
+            if (res.data[type]) {
+                for (const proxy of res.data[type]) {
+                    rx += proxy.today_traffic_in || 0;
+                    tx += proxy.today_traffic_out || 0;
+                }
+            }
+        }
+        return { rx, tx };
+    } catch (e) {
+        return { rx: 0, tx: 0 };
+    }
 }
 
 main();

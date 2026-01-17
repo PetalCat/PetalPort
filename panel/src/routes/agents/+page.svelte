@@ -22,6 +22,16 @@
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
     };
+
+    let showRenameModal = $state(false);
+    let renameAgentId = $state('');
+    let renameAgentName = $state('');
+
+    const openRename = (id: string, currentName: string) => {
+        renameAgentId = id;
+        renameAgentName = currentName;
+        showRenameModal = true;
+    };
 </script>
 
 <div class="flex justify-between items-center mb-8">
@@ -40,7 +50,12 @@
         <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-start mb-4">
                 <div>
-                    <h3 class="font-bold text-lg dark:text-white">{agent.name}</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-lg dark:text-white">{agent.name}</h3>
+                        <button onclick={() => openRename(agent.id, agent.name)} class="text-gray-400 hover:text-blue-500" title="Rename Agent">
+                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                    </div>
                     <p class="text-xs text-gray-400 font-mono mt-1">{agent.id}</p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -69,6 +84,18 @@
                     <span>Last Seen:</span>
                     <span>{agent.lastSeen ? new Date(agent.lastSeen).toLocaleString() : 'Never'}</span>
                 </div>
+                {#if agent.stats}
+                <div class="border-t border-gray-100 dark:border-gray-700 pt-2 mt-2">
+                     <div class="flex justify-between text-xs">
+                        <span>Traffic In:</span>
+                        <span class="font-mono text-gray-700 dark:text-gray-200">{(agent.stats.rx / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span>Traffic Out:</span>
+                        <span class="font-mono text-gray-700 dark:text-gray-200">{(agent.stats.tx / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                </div>
+                {/if}
             </div>
         </div>
     {/each}
@@ -105,9 +132,10 @@ docker run -d \\
   --cap-add NET_ADMIN \\
   -e PANEL_URL=${window.location.origin} \\
   -e ENROLL_KEY=${enrollmentKey} \\
+  -v petalport_agent_data:/data \\
   ghcr.io/petalcat/petalport-agent:latest`}</pre>
                 <button 
-                    onclick={() => copyToClipboard(`docker pull ghcr.io/petalcat/petalport-agent:latest\n\ndocker run -d --name petalport-agent --restart unless-stopped --network host --cap-add NET_ADMIN -e PANEL_URL=${window.location.origin} -e ENROLL_KEY=${enrollmentKey} ghcr.io/petalcat/petalport-agent:latest`)}
+                    onclick={() => copyToClipboard(`docker pull ghcr.io/petalcat/petalport-agent:latest\n\ndocker run -d --name petalport-agent --restart unless-stopped --network host --cap-add NET_ADMIN -e PANEL_URL=${window.location.origin} -e ENROLL_KEY=${enrollmentKey} -v petalport_agent_data:/data ghcr.io/petalcat/petalport-agent:latest`)}
                     class="absolute top-4 right-4 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded opacity-90 transition-opacity"
                     aria-label="Copy Command"
                 >
