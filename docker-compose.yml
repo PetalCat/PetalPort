@@ -56,7 +56,13 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: petalport-cloudflared
     restart: unless-stopped
-    command: tunnel run
+    command:
+      - tunnel
+      - run
+      - --dns-resolver-addrs
+      - 1.1.1.1:53
+      - --dns-resolver-addrs
+      - 1.0.0.1:53
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     networks:
