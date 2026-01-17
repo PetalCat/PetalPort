@@ -27,7 +27,7 @@ export const actions = {
             return fail(400, { missing: true });
         }
 
-        const proxies = await getProxies();
+        let proxies = await getProxies();
 
         if (proxies.some(p => p.bindPort === bindPort)) {
             return fail(400, { error: 'Port already in use' });
@@ -47,7 +47,15 @@ export const actions = {
         await saveProxies(proxies);
 
         // Open firewall port
-        await allowPort(bindPort, `FRP: ${name}`);
+        try {
+            await allowPort(bindPort, `FRP: ${name}`);
+        } catch (e: any) {
+            console.error('Firewall failed:', e);
+            // Revert changes
+            proxies = proxies.filter(p => p.id !== newProxy.id);
+            await saveProxies(proxies);
+            return fail(500, { error: `Firewall failed: ${e.message}` });
+        }
 
         return { success: true };
     },

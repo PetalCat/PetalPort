@@ -6,24 +6,31 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
  * Run a UFW command on the host via a privileged Docker container
  */
 async function runUfwCommand(command: string): Promise<string> {
-    // We use nsenter to run the command in the host's namespaces.
-    // This avoids dependency issues (like python missing for ufw) by using the host's binaries and environment.
+    console.log(`[Firewall] Running on host: ${command}`);
     const container = await docker.createContainer({
         Image: 'alpine:latest',
         // Install util-linux to get nsenter, then execute command on host (pid 1)
-        Cmd: ['sh', '-c', `apk add --no-cache util-linux && nsenter -t 1 -m -u -n -i -- sh -c "${command}"`],
+        // Use full path /usr/sbin/ufw just in case
+        Cmd: ['sh', '-c', `apk add --no-cache util-linux >/dev/null 2>&1 && nsenter -t 1 -m -u -n -i -- sh -c "/usr/sbin/ufw ${command}"`],
         HostConfig: {
-            AutoRemove: true,
+            AutoRemove: false, // Keep it briefly to read logs if needed (we read then remove)
             Privileged: true,
             PidMode: 'host'
         }
     });
 
     await container.start();
-    const result = await container.wait();
+    const status = await container.wait();
 
     // Get logs
     const logs = await container.logs({ stdout: true, stderr: true });
+    await container.remove();
+
+    if (status.StatusCode !== 0) {
+        console.error(`[Firewall] Command failed (exit ${status.StatusCode}): ${logs.toString()}`);
+        throw new Error(`Firewall command failed: ${logs.toString()}`);
+    }
+
     return logs.toString();
 }
 
@@ -31,26 +38,15 @@ async function runUfwCommand(command: string): Promise<string> {
  * Allow a TCP port through UFW
  */
 export async function allowPort(port: number, comment?: string): Promise<void> {
-    try {
-        const commentArg = comment ? ` comment "${comment}"` : '';
-        console.log(`[Firewall] Allowing port ${port}/tcp`);
-        await runUfwCommand(`ufw allow ${port}/tcp${commentArg}`);
-    } catch (error) {
-        console.error(`[Firewall] Failed to allow port ${port}:`, error);
-        // Don't throw - firewall errors shouldn't break the app
-    }
+    const commentArg = comment ? ` comment "${comment}"` : '';
+    await runUfwCommand(`allow ${port}/tcp${commentArg}`);
 }
 
 /**
  * Deny/remove a TCP port from UFW
  */
 export async function denyPort(port: number): Promise<void> {
-    try {
-        console.log(`[Firewall] Removing port ${port}/tcp`);
-        await runUfwCommand(`ufw delete allow ${port}/tcp`);
-    } catch (error) {
-        console.error(`[Firewall] Failed to remove port ${port}:`, error);
-    }
+    await runUfwCommand(`delete allow ${port}/tcp`);
 }
 
 /**

@@ -124,7 +124,11 @@ export const deleteProxiesForAgent = async (agentId: string) => {
 
     // Clean up firewalls
     for (const p of agentProxies) {
-        await denyPort(p.bindPort);
+        try {
+            await denyPort(p.bindPort);
+        } catch (e) {
+            console.error(`Failed to close port ${p.bindPort}:`, e);
+        }
     }
 
     // Remove from list
