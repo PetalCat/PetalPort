@@ -77,7 +77,7 @@ const init = async () => {
     console.log('[PetalPort] Verified wg0.conf');
 };
 
-import { RateLimiter } from 'svelte-kit-rate-limiter/server';
+import { RateLimiter } from 'sveltekit-rate-limiter/server';
 
 const limiter = new RateLimiter({
     IP: [100, 'm'], // 100 requests per minute per IP
