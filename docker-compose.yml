@@ -11,8 +11,10 @@ services:
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
+      - PORT=8456
+      - FRP_DASHBOARD_URL=http://172.17.0.1:7500
     privileged: true
-    pid: host - PORT=8456 - FRP_DASHBOARD_URL=http://172.17.0.1:7500
+    pid: host
     ports:
       - target: 8456
         published: 8456
