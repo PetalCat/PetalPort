@@ -1,6 +1,6 @@
 
 import { fail, redirect } from '@sveltejs/kit';
-import { getUsers, getSettings, createUser } from '$lib/server/db';
+import { getUsers, getSettings, createUser, createSession } from '$lib/server/db';
 
 export const load = async ({ locals }) => {
     // If authenticated, redirect home
