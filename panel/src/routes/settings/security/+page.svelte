@@ -5,7 +5,7 @@
 </script>
 
 <div class="p-6">
-	<h1 class="text-2xl font-bold mb-6 text-white">Security Settings</h1>
+
 
 	{#if form?.error}
 		<div class="p-4 mb-4 text-sm text-red-500 bg-red-900/20 border border-red-500/50 rounded-lg">

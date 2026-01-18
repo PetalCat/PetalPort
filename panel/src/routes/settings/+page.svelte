@@ -5,9 +5,7 @@
     let { data }: { data: PageData } = $props();
 </script>
 
-<div class="flex justify-between items-center mb-8">
-    <h2 class="text-3xl font-bold text-gray-800 dark:text-white">System Settings</h2>
-</div>
+
 
 <form method="POST" use:enhance class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 max-w-2xl">
     <div class="space-y-6">
