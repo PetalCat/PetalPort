@@ -1,5 +1,6 @@
-import otplib from 'otplib';
-const { authenticator } = otplib;
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { authenticator } = require('otplib');
 
 export const generateMfaSecret = () => {
     return authenticator.generateSecret();
