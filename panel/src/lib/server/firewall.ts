@@ -14,6 +14,7 @@ async function runUfwCommand(command: string): Promise<string> {
         Cmd: ['sh', '-c', `apk add --no-cache util-linux >/dev/null 2>&1 && nsenter -t 1 -m -u -n -i -- sh -c "/usr/sbin/ufw ${command}"`],
         HostConfig: {
             AutoRemove: false, // Keep it briefly to read logs if needed (we read then remove)
+            NetworkMode: 'host',
             Privileged: true,
             PidMode: 'host'
         }
