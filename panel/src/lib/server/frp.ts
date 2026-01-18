@@ -51,10 +51,6 @@ export const syncConfig = async (proxies: ProxyRule[]) => {
     // Explicitly bind to IPv4 0.0.0.0 to avoid IPv6-only binding issues
     let config = `bindAddr = "0.0.0.0"
     bindPort = 7000
-    
-# Auth (optional, global token)
-# auth.method = "token"
-# auth.token = "SECRET_TOKEN"
 
 # Dashboard
 webServer.addr = "0.0.0.0"
