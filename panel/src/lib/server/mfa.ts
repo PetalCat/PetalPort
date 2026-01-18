@@ -1,4 +1,5 @@
-import { authenticator } from 'otplib';
+import otplib from 'otplib';
+const { authenticator } = otplib;
 
 export const generateMfaSecret = () => {
     return authenticator.generateSecret();
