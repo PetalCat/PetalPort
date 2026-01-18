@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { restartContainer } from './docker';
 import { allowPort, denyPort } from './firewall';
+import { getSettings, updateSettings } from './settings';
 
 import { env } from '$env/dynamic/private';
 
@@ -60,12 +61,24 @@ export const syncConfig = async (proxies: ProxyRule[]) => {
         console.log('====================================================');
     }
 
+    // Ensure Auth Token
+    let settings = await getSettings();
+    if (!settings.frpAuthToken) {
+        const token = randomBytes(32).toString('hex');
+        console.log(`[FRP] Generated new FRP Auth Token`);
+        settings = await updateSettings({ frpAuthToken: token });
+    }
+    const authToken = settings.frpAuthToken;
+
     // Explicitly bind to IPv4 0.0.0.0 to avoid IPv6-only binding issues
     let config = `bindAddr = "0.0.0.0"
-    bindPort = 7000
+bindPort = 7000
+
+auth.method = "token"
+auth.token = "${authToken}"
 
 # Dashboard
-webServer.addr = "0.0.0.0"
+webServer.addr = "127.0.0.1"
 webServer.port = 7500
 webServer.user = "${dashboardUser}"
 webServer.password = "${dashboardPassword}"
