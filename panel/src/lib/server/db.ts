@@ -117,9 +117,11 @@ export const getSettings = async (): Promise<Settings> => {
     }
 };
 
-const updated = { ...current, ...updates };
-await fs.writeFile(SETTINGS_FILE, JSON.stringify(updated, null, 2), { mode: 0o600 });
-return updated;
+export const updateSettings = async (updates: Partial<Settings>) => {
+    const current = await getSettings();
+    const updated = { ...current, ...updates };
+    await fs.writeFile(SETTINGS_FILE, JSON.stringify(updated, null, 2), { mode: 0o600 });
+    return updated;
 };
 
 // --- Sessions ---
