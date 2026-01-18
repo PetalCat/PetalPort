@@ -7,6 +7,29 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
  */
 async function runUfwCommand(command: string): Promise<string> {
     console.log(`[Firewall] Running on host: ${command}`);
+
+    // Ensure image exists
+    try {
+        await docker.getImage('alpine:latest').inspect();
+    } catch {
+        // Image missing, pull it. 
+        // Note: pull() returns a stream, we need to wait for it.
+        // For simplicity with dockerode, we can just run a 'docker pull' via exec or use the stream properly.
+        // Or simpler: handle the createContainer error.
+        console.log('[Firewall] Pulling alpine:latest...');
+        await new Promise((resolve, reject) => {
+            docker.pull('alpine:latest', (err: any, stream: any) => {
+                if (err) return reject(err);
+                docker.modem.followProgress(stream, onFinished, onProgress);
+                function onFinished(err: any, output: any) {
+                    if (err) return reject(err);
+                    resolve(output);
+                }
+                function onProgress(event: any) { }
+            });
+        });
+    }
+
     const container = await docker.createContainer({
         Image: 'alpine:latest',
         // Install util-linux to get nsenter, then execute command on host (pid 1)
