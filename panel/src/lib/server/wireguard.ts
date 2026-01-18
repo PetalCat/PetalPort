@@ -1,10 +1,9 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { restartContainer } from './docker';
 
-const execAsync = promisify(exec);
+// const execAsync = promisify(exec); // Removed
+
 
 import { env } from '$env/dynamic/private';
 
@@ -41,33 +40,19 @@ export const savePeers = async (peers: Peer[]) => {
 import nacl from 'tweetnacl';
 
 export const generateKeyPair = async () => {
-    try {
-        // Try using system wg command first
-        const { stdout: privateKey } = await execAsync('wg genkey');
-        const { stdout: publicKey } = await execAsync(`echo '${privateKey.trim()}' | wg pubkey`);
-        return { privateKey: privateKey.trim(), publicKey: publicKey.trim() };
-    } catch (e) {
-        console.warn('wg tool not found, falling back to JS implementation');
+    // Use tweetnacl (Curve25519) exclusively to avoid shell usage
+    const pair = nacl.box.keyPair();
+    const privateKey = Buffer.from(pair.secretKey).toString('base64');
+    const publicKey = Buffer.from(pair.publicKey).toString('base64');
 
-        // Fallback using tweetnacl (Curve25519)
-        const pair = nacl.box.keyPair();
-        const privateKey = Buffer.from(pair.secretKey).toString('base64');
-        const publicKey = Buffer.from(pair.publicKey).toString('base64');
-
-        return { privateKey, publicKey };
-    }
+    return { privateKey, publicKey };
 };
 
 export const getPublicKey = async (privateKey: string): Promise<string> => {
-    try {
-        const { stdout } = await execAsync(`echo '${privateKey.trim()}' | wg pubkey`);
-        return stdout.trim();
-    } catch (e) {
-        // Fallback using tweetnacl
-        const secretKey = new Uint8Array(Buffer.from(privateKey, 'base64'));
-        const keyPair = nacl.box.keyPair.fromSecretKey(secretKey);
-        return Buffer.from(keyPair.publicKey).toString('base64');
-    }
+    // Use tweetnacl to derive public key
+    const secretKey = new Uint8Array(Buffer.from(privateKey, 'base64'));
+    const keyPair = nacl.box.keyPair.fromSecretKey(secretKey);
+    return Buffer.from(keyPair.publicKey).toString('base64');
 };
 
 export const ensureIdentity = async () => {

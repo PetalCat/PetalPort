@@ -46,8 +46,20 @@ export const saveProxies = async (proxies: ProxyRule[]) => {
     }
 };
 
+import { randomBytes } from 'node:crypto';
+
 export const syncConfig = async (proxies: ProxyRule[]) => {
     console.log('[FRP] Generating frps.toml...');
+
+    const dashboardUser = env.FRP_DASHBOARD_USER || 'admin';
+    const dashboardPassword = env.FRP_DASHBOARD_PASSWORD || randomBytes(16).toString('hex');
+
+    if (!env.FRP_DASHBOARD_PASSWORD) {
+        console.log('====================================================');
+        console.log(`[FRP] Generated Secure Dashboard Password: ${dashboardPassword}`);
+        console.log('====================================================');
+    }
+
     // Explicitly bind to IPv4 0.0.0.0 to avoid IPv6-only binding issues
     let config = `bindAddr = "0.0.0.0"
     bindPort = 7000
@@ -55,8 +67,8 @@ export const syncConfig = async (proxies: ProxyRule[]) => {
 # Dashboard
 webServer.addr = "0.0.0.0"
 webServer.port = 7500
-webServer.user = "admin"
-webServer.password = "admin"
+webServer.user = "${dashboardUser}"
+webServer.password = "${dashboardPassword}"
 
 
 `;
@@ -82,7 +94,7 @@ webServer.password = "admin"
     // config += `allowPorts = [${allowedPorts}]\n`; 
     // (Syntax depends on frps version, toml usually uses arrays)
 
-    await fs.writeFile(FRPS_CONF_FILE, config);
+    await fs.writeFile(FRPS_CONF_FILE, config, { mode: 0o600 });
     await restartContainer('petalport-frps');
 };
 

@@ -24,6 +24,7 @@
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/vite": "^4.1.17",
+		"@types/bcryptjs": "^2.4.6",
 		"@types/dockerode": "^4.0.0",
 		"@types/node": "^24",
 		"drizzle-kit": "^0.31.8",
@@ -39,8 +40,12 @@
 	},
 	"dependencies": {
 		"@types/qrcode": "^1.5.6",
+		"bcryptjs": "^3.0.3",
 		"dockerode": "^4.0.9",
+		"otplib": "^13.1.1",
 		"qrcode": "^1.5.4",
-		"tweetnacl": "^1.0.3"
+		"sveltekit-rate-limiter": "^0.7.0",
+		"tweetnacl": "^1.0.3",
+		"zod": "^4.3.5"
 	}
 }

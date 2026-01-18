@@ -13,7 +13,13 @@ services:
       - HOST=0.0.0.0
       - PORT=8456
       - FRP_DASHBOARD_URL=http://172.17.0.1:7500
-    privileged: true
+    # privileged: true (CRIT-04: Reduced to specific caps)
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
     pid: host
     ports:
       - target: 8456
@@ -25,7 +31,7 @@ services:
       - public
 
   wireguard:
-    image: linuxserver/wireguard:latest
+    image: linuxserver/wireguard:1.0.20210914 # Pinned version
     container_name: petalport-wireguard
     cap_add:
       - NET_ADMIN
@@ -42,15 +48,25 @@ services:
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     networks:
       - internal
       - public
 
   frps:
-    image: snowdreamtech/frps:latest
+    image: snowdreamtech/frps:0.59.0 # Pinned version
     container_name: petalport-frps
     restart: unless-stopped
     network_mode: host
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
     volumes:
       - ./config/frp:/etc/frp
 
