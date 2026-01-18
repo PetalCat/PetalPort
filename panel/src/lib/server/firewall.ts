@@ -1,61 +1,26 @@
-import Docker from 'dockerode';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
-const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+const execAsync = promisify(exec);
 
 /**
- * Run a UFW command on the host via a privileged Docker container
+ * Run a UFW command on the host directly (we are privileged + pid:host)
  */
 async function runUfwCommand(command: string): Promise<string> {
     console.log(`[Firewall] Running on host: ${command}`);
 
-    // Ensure image exists
+    // We are privileged and share PID namespace with host.
+    // We can use nsenter to jump to PID 1's namespace (host init) and run the command.
+    const fullCommand = `nsenter -t 1 -m -u -n -i -- sh -c "/usr/sbin/ufw ${command}"`;
+
     try {
-        await docker.getImage('alpine:latest').inspect();
-    } catch {
-        // Image missing, pull it. 
-        // Note: pull() returns a stream, we need to wait for it.
-        // For simplicity with dockerode, we can just run a 'docker pull' via exec or use the stream properly.
-        // Or simpler: handle the createContainer error.
-        console.log('[Firewall] Pulling alpine:latest...');
-        await new Promise((resolve, reject) => {
-            docker.pull('alpine:latest', (err: any, stream: any) => {
-                if (err) return reject(err);
-                docker.modem.followProgress(stream, onFinished, onProgress);
-                function onFinished(err: any, output: any) {
-                    if (err) return reject(err);
-                    resolve(output);
-                }
-                function onProgress(event: any) { }
-            });
-        });
+        const { stdout, stderr } = await execAsync(fullCommand);
+        if (stderr) console.warn(`[Firewall] Stderr: ${stderr}`);
+        return stdout;
+    } catch (e: any) {
+        console.error(`[Firewall] Command failed: ${fullCommand}`, e);
+        throw new Error(`Firewall command failed: ${e.message}`);
     }
-
-    const container = await docker.createContainer({
-        Image: 'alpine:latest',
-        // Install util-linux to get nsenter, then execute command on host (pid 1)
-        // Use full path /usr/sbin/ufw just in case
-        Cmd: ['sh', '-c', `apk add --no-cache util-linux >/dev/null 2>&1 && nsenter -t 1 -m -u -n -i -- sh -c "/usr/sbin/ufw ${command}"`],
-        HostConfig: {
-            AutoRemove: false, // Keep it briefly to read logs if needed (we read then remove)
-            NetworkMode: 'host',
-            Privileged: true,
-            PidMode: 'host'
-        }
-    });
-
-    await container.start();
-    const status = await container.wait();
-
-    // Get logs
-    const logs = await container.logs({ stdout: true, stderr: true });
-    await container.remove();
-
-    if (status.StatusCode !== 0) {
-        console.error(`[Firewall] Command failed (exit ${status.StatusCode}): ${logs.toString()}`);
-        throw new Error(`Firewall command failed: ${logs.toString()}`);
-    }
-
-    return logs.toString();
 }
 
 /**

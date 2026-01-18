@@ -2,7 +2,7 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm && apk add --no-cache util-linux
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install
