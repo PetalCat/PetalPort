@@ -47,6 +47,8 @@ export const saveProxies = async (proxies: ProxyRule[]) => {
 };
 
 export const syncConfig = async (proxies: ProxyRule[]) => {
+    console.log('[FRP] Generating frps.toml...');
+    // Explicitly bind to IPv4 0.0.0.0 to avoid IPv6-only binding issues
     let config = `bindAddr = "0.0.0.0"
     bindPort = 7000
     
