@@ -47,7 +47,8 @@ export const saveProxies = async (proxies: ProxyRule[]) => {
 };
 
 export const syncConfig = async (proxies: ProxyRule[]) => {
-    let config = `bindPort = 7000
+    let config = `bindAddr = "0.0.0.0"
+    bindPort = 7000
     
 # Auth (optional, global token)
 # auth.method = "token"
