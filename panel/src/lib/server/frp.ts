@@ -85,7 +85,7 @@ webServer.password = "admin"
     // (Syntax depends on frps version, toml usually uses arrays)
 
     await fs.writeFile(FRPS_CONF_FILE, config);
-    // await restartContainer('petalport-frps');
+    await restartContainer('petalport-frps');
 };
 
 export const generateAgentConfig = async (agentId: string, serverAddr: string, serverPort: number, token?: string): Promise<string> => {
