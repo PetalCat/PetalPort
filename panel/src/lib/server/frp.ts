@@ -34,9 +34,24 @@ export const getProxies = async (): Promise<ProxyRule[]> => {
 
 import { emitToAgent } from './sse';
 
+import { syncConfig as wgSyncConfig, getPeers } from './wireguard';
+
 export const saveProxies = async (proxies: ProxyRule[]) => {
     await fs.writeFile(PROXIES_FILE, JSON.stringify(proxies, null, 2));
-    await syncConfig(proxies); // Used for Server config (allowPorts if needed, or just static)
+    await syncConfig(proxies); // Sync FRP
+
+    // Sync WireGuard (for UDP DNAT rules)
+    const peers = await getPeers();
+    await wgSyncConfig(peers);
+
+    // Sync Firewall
+    for (const proxy of proxies) {
+        try {
+            await allowPort(proxy.bindPort, `FRP: ${proxy.name}`);
+        } catch (e) {
+            console.error(`[FRP] Failed to allow port ${proxy.bindPort}`, e);
+        }
+    }
 
     // Notify agents that config has changed
     // We can optimize to only notify affected agents, or just broadcast to all if simpler for now.

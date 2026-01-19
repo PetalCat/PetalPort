@@ -91,14 +91,117 @@ AllowedIPs = 0.0.0.0/0, ::/0
     }
 };
 
+const SERVER_KEY_FILE = path.join(CONFIG_DIR, 'server.key');
+const SERVER_PUB_FILE = path.join(CONFIG_DIR, 'server.pub');
+
+export const ensureServerKey = async (): Promise<string> => {
+    try {
+        const key = await fs.readFile(SERVER_KEY_FILE, 'utf-8');
+        return key.trim();
+    } catch {
+        console.log('[PetalPort] Generating server key pair...');
+        const { privateKey, publicKey } = await generateKeyPair();
+        await fs.writeFile(SERVER_KEY_FILE, privateKey);
+        await fs.writeFile(SERVER_PUB_FILE, publicKey);
+        console.log('[PetalPort] Generated server key pair');
+        return privateKey;
+    }
+};
+
+import { randomUUID } from 'node:crypto';
+
+export const createPeer = async (name: string, clientPublicKey?: string): Promise<Peer> => {
+    const peers = await getPeers();
+
+    // Simple IP allocation: find next available .X
+    // Assuming /24 network 10.13.13.0/24. Server is .1
+    const usedIps = new Set(peers.map(p => {
+        const parts = p.allowedIps.split('.');
+        return parseInt(parts[3].split('/')[0]); // "10.13.13.2/32" -> 2
+    }));
+
+    let octet = 2;
+    while (usedIps.has(octet)) octet++;
+
+    if (octet > 254) {
+        throw new Error('Subnet exhausted');
+    }
+
+    let publicKey = clientPublicKey;
+    let privateKey: string | undefined;
+
+    if (!publicKey) {
+        const keys = await generateKeyPair();
+        publicKey = keys.publicKey;
+        privateKey = keys.privateKey;
+    }
+
+    const newPeer: Peer = {
+        id: randomUUID(),
+        name,
+        publicKey,
+        privateKey, // Only stored if generated server-side
+        allowedIps: `10.13.13.${octet}/32`,
+        createdAt: new Date().toISOString(),
+        enabled: true
+    };
+
+    peers.push(newPeer);
+    await savePeers(peers);
+
+    return newPeer;
+};
+
+import { getProxies } from './frp';
+import { getAgents } from './agents';
+
 export const syncConfig = async (peers: Peer[]) => {
+    const privateKey = await ensureServerKey();
+    const proxies = await getProxies();
+    const agents = await getAgents();
+
+    // Generate DNAT rules for UDP proxies
+    let postUpRules = 'iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE';
+    let postDownRules = 'iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE';
+
+    for (const proxy of proxies) {
+        if (proxy.type !== 'udp') continue;
+
+        // Find Agent
+        const agent = agents.find(a => a.id === proxy.agentId);
+        if (!agent) continue;
+
+        // Find Peer:
+        // 1. By Agent's Linked Peer ID (Robust)
+        // 2. Fallback: Agent Name === Peer Name (Legacy/Manual)
+        let peer = peers.find(p => p.id === agent.wgPeerId);
+        if (!peer) {
+            peer = peers.find(p => p.name === agent.name);
+        }
+
+        if (!peer) {
+            console.warn(`[WireGuard] Could not find peer for UDP proxy ${proxy.name} (Agent: ${agent.name})`);
+            continue;
+        }
+
+        // Extract Peer IP
+        const peerIp = peer.allowedIps.split('/')[0];
+
+        // 2️⃣ Stable NAT mapping on the EDGE (DNAT)
+        // iptables -t nat -A PREROUTING -p udp --dport <BIND> -j DNAT --to-destination <PEER_IP>:<LOCAL_PORT>
+        postUpRules += `; iptables -t nat -A PREROUTING -p udp --dport ${proxy.bindPort} -j DNAT --to-destination ${peerIp}:${proxy.localPort}`;
+        postDownRules += `; iptables -t nat -D PREROUTING -p udp --dport ${proxy.bindPort} -j DNAT --to-destination ${peerIp}:${proxy.localPort}`;
+    }
+
+    // 4️⃣ MTU control (1380)
     // Server config
     let config = `[Interface]
 Address = 10.13.13.1/24
 ListenPort = 51820
-PrivateKey = ${process.env.WG_PRIVATE_KEY || 'REPLACE_ME_WITH_SERVER_KEY'}
-PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+PrivateKey = ${privateKey}
+MTU = 1380
+PostUp = ${postUpRules}
+PostDown = ${postDownRules}
 
 `;
 
@@ -109,6 +212,7 @@ PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING 
 # Name: ${peer.name}
 PublicKey = ${peer.publicKey}
 AllowedIPs = ${peer.allowedIps}
+PersistentKeepalive = 25
 `;
         if (peer.presharedKey) {
             config += `PresharedKey = ${peer.presharedKey}\n`;
@@ -118,6 +222,9 @@ AllowedIPs = ${peer.allowedIps}
 
     await fs.writeFile(WG_CONF_FILE, config);
     // Restart WireGuard to apply changes
-    // await restartContainer('petalport-wireguard');
-    // Or maybe just sync? Restart is safer for full apply.
+    try {
+        await restartContainer('petalport-wireguard');
+    } catch (e) {
+        console.error('[PetalPort] Failed to restart WireGuard container:', e);
+    }
 };

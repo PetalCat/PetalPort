@@ -88,6 +88,11 @@ const authLimiter = new RateLimiter({
     IP: [5, 'm'], // 5 requests per minute for auth routes
 });
 
+// Invoke init
+init().catch(err => {
+    console.error('[PetalPort] Initialization failed:', err);
+});
+
 export const handle: Handle = async ({ event, resolve }) => {
     const { pathname } = event.url;
 

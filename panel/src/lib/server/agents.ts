@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { env } from '$env/dynamic/private';
+import { createPeer, type Peer } from './wireguard';
 
 const CONFIG_ROOT = env.CONFIG_ROOT || '/config';
 const AGENTS_FILE = path.join(CONFIG_ROOT, 'agents.json');
@@ -23,6 +24,7 @@ export interface Agent {
         rx: number; // bytes received
         tx: number; // bytes sent
     };
+    wgPeerId?: string; // Linked WireGuard Peer ID
 }
 
 interface EnrollmentKey {
@@ -86,7 +88,8 @@ export const createEnrollmentKey = async (ttlMinutes = 30): Promise<string> => {
     return key;
 };
 
-export const redeemEnrollmentKey = async (key: string, meta: Agent['meta']): Promise<Agent | null> => {
+// Return Agent and optionally the newly created Peer (so we can return credentials once)
+export const redeemEnrollmentKey = async (key: string, meta: Agent['meta'], publicKey?: string): Promise<{ agent: Agent, peer?: Peer } | null> => {
     const keys = await getEnrollmentKeys();
     const now = Date.now();
     const keyIdx = keys.findIndex(k => k.key === key && !k.used && k.expiresAt > now);
@@ -100,21 +103,33 @@ export const redeemEnrollmentKey = async (key: string, meta: Agent['meta']): Pro
     // Create new agent
     const agentToken = crypto.randomBytes(32).toString('hex');
     const agentId = crypto.randomUUID();
+    const name = meta?.hostname || `Agent-${agentId.slice(0, 8)}`;
+
+    // Create WireGuard Peer automatically
+    let peer: Peer | undefined;
+    try {
+        console.log(`[PetalPort] Creating WireGuard peer for new agent: ${name}`);
+        peer = await createPeer(name, publicKey);
+    } catch (e) {
+        console.error(`[PetalPort] Failed to create WireGuard peer for agent ${name}:`, e);
+        // Continue without peer? Or fail? Best to continue but warn.
+    }
 
     const newAgent: Agent = {
         id: agentId,
-        name: meta?.hostname || `Agent-${agentId.slice(0, 8)}`,
+        name,
         token: agentToken,
         status: 'online',
         lastSeen: new Date().toISOString(),
-        meta
+        meta,
+        wgPeerId: peer?.id
     };
 
     const agents = await getAgents();
     agents.push(newAgent);
     await saveAgents(agents);
 
-    return newAgent;
+    return { agent: newAgent, peer };
 };
 
 export const validateAgentToken = async (token: string): Promise<Agent | null> => {

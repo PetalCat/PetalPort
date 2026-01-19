@@ -1,6 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { getPeers, savePeers, generateKeyPair, type Peer } from '$lib/server/wireguard';
-import { randomUUID } from 'node:crypto';
+import { getPeers, savePeers, createPeer } from '$lib/server/wireguard';
 
 export const load = async () => {
     const peers = await getPeers();
@@ -21,36 +20,11 @@ export const actions = {
             return fail(400, { missing: true });
         }
 
-        const peers = await getPeers();
-
-        // Simple IP allocation: find next available .X
-        // Assuming /24 network 10.13.13.0/24. Server is .1
-        const usedIps = new Set(peers.map(p => {
-            const parts = p.allowedIps.split('.');
-            return parseInt(parts[3].split('/')[0]); // "10.13.13.2/32" -> 2
-        }));
-
-        let octet = 2;
-        while (usedIps.has(octet)) octet++;
-
-        if (octet > 254) {
-            return fail(400, { error: 'Subnet exhausted' });
+        try {
+            await createPeer(name);
+        } catch (e: any) {
+            return fail(400, { error: e.message || 'Failed to create peer' });
         }
-
-        const keys = await generateKeyPair();
-
-        const newPeer: Peer = {
-            id: randomUUID(),
-            name,
-            publicKey: keys.publicKey,
-            privateKey: keys.privateKey, // Stored so we can show QR code later (optional security risk, but convenient for personal VPN)
-            allowedIps: `10.13.13.${octet}/32`,
-            createdAt: new Date().toISOString(),
-            enabled: true
-        };
-
-        peers.push(newPeer);
-        await savePeers(peers);
 
         return { success: true };
     },
