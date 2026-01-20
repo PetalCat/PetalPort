@@ -23,6 +23,12 @@ echo "[WireGuard] Config found, starting WireGuard..."
 mkdir -p /etc/wireguard
 ln -sf "$CONFIG_FILE" /etc/wireguard/wg0.conf
 
+# Bring down existing interface if it exists (from previous container run)
+if ip link show wg0 &>/dev/null; then
+    echo "[WireGuard] wg0 already exists, bringing it down first..."
+    wg-quick down wg0 || true
+fi
+
 # Start WireGuard
 wg-quick up wg0
 
