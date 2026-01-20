@@ -48,23 +48,35 @@ async function runUfwCommand(args: string[]): Promise<string> {
 }
 
 /**
- * Allow a TCP port through UFW
+ * Allow a port through UFW
  */
-export async function allowPort(port: number, comment?: string): Promise<void> {
-    const args = ['allow', `${port}/tcp`];
-    if (comment) {
-        // UFW comment syntax: allow 80/tcp comment 'My Comment'
-        // arguments must be separate
-        args.push('comment', comment);
+export async function allowPort(port: number, comment?: string, protocol: 'tcp' | 'udp' | 'both' = 'tcp'): Promise<void> {
+    const protocols = protocol === 'both' ? ['tcp', 'udp'] : [protocol];
+
+    for (const proto of protocols) {
+        const args = ['allow', `${port}/${proto}`];
+        if (comment) {
+            // UFW comment syntax: allow 80/tcp comment 'My Comment'
+            args.push('comment', comment);
+        }
+        await runUfwCommand(args);
     }
-    await runUfwCommand(args);
 }
 
 /**
- * Deny/remove a TCP port from UFW
+ * Deny/remove a port from UFW
  */
-export async function denyPort(port: number): Promise<void> {
-    await runUfwCommand(['delete', 'allow', `${port}/tcp`]);
+export async function denyPort(port: number, protocol: 'tcp' | 'udp' | 'both' = 'tcp'): Promise<void> {
+    const protocols = protocol === 'both' ? ['tcp', 'udp'] : [protocol];
+
+    for (const proto of protocols) {
+        try {
+            await runUfwCommand(['delete', 'allow', `${port}/${proto}`]);
+        } catch (e) {
+            // Rule might not exist, ignore
+            console.log(`[Firewall] Rule ${port}/${proto} might not exist, skipping`);
+        }
+    }
 }
 
 /**

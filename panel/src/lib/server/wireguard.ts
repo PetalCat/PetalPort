@@ -10,7 +10,11 @@ import { env } from '$env/dynamic/private';
 const CONFIG_ROOT = env.CONFIG_ROOT || '/config';
 const CONFIG_DIR = path.join(CONFIG_ROOT, 'wireguard');
 const PEERS_FILE = path.join(CONFIG_DIR, 'peers.json');
-const WG_CONF_FILE = path.join(CONFIG_DIR, 'wg0.conf');
+// linuxserver/wireguard expects config in wg_confs subdirectory
+const WG_CONFS_DIR = path.join(CONFIG_DIR, 'wg_confs');
+const WG_CONF_FILE = path.join(WG_CONFS_DIR, 'wg0.conf');
+// WireGuard listen port (443 is good for NAT traversal)
+const WG_LISTEN_PORT = parseInt(env.WG_LISTEN_PORT || '443');
 
 export interface Peer {
     id: string; // UUID
@@ -108,6 +112,16 @@ export const ensureServerKey = async (): Promise<string> => {
     }
 };
 
+export const getServerPublicKey = async (): Promise<string> => {
+    try {
+        await ensureServerKey(); // Ensure keys exist
+        const key = await fs.readFile(SERVER_PUB_FILE, 'utf-8');
+        return key.trim();
+    } catch {
+        return 'SERVER_PUB_KEY_ERROR';
+    }
+};
+
 import { randomUUID } from 'node:crypto';
 
 export const createPeer = async (name: string, clientPublicKey?: string): Promise<Peer> => {
@@ -160,9 +174,13 @@ export const syncConfig = async (peers: Peer[]) => {
     const proxies = await getProxies();
     const agents = await getAgents();
 
+    // Ensure wg_confs directory exists
+    await fs.mkdir(WG_CONFS_DIR, { recursive: true });
+
     // Generate DNAT rules for UDP proxies
-    let postUpRules = 'iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE';
-    let postDownRules = 'iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE';
+    // Using host network, so we need to specify the correct outbound interface
+    let postUpRules = 'iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.13.13.0/24 -j MASQUERADE';
+    let postDownRules = 'iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.13.13.0/24 -j MASQUERADE';
 
     for (const proxy of proxies) {
         if (proxy.type !== 'udp') continue;
@@ -187,19 +205,17 @@ export const syncConfig = async (peers: Peer[]) => {
         // Extract Peer IP
         const peerIp = peer.allowedIps.split('/')[0];
 
-        // 2️⃣ Stable NAT mapping on the EDGE (DNAT)
-        // iptables -t nat -A PREROUTING -p udp --dport <BIND> -j DNAT --to-destination <PEER_IP>:<LOCAL_PORT>
+        // DNAT: Incoming UDP on bindPort -> peer's WireGuard IP + localPort
         postUpRules += `; iptables -t nat -A PREROUTING -p udp --dport ${proxy.bindPort} -j DNAT --to-destination ${peerIp}:${proxy.localPort}`;
         postDownRules += `; iptables -t nat -D PREROUTING -p udp --dport ${proxy.bindPort} -j DNAT --to-destination ${peerIp}:${proxy.localPort}`;
     }
 
-    // 4️⃣ MTU control (1380)
-    // Server config
+    // Server config with dynamic listen port (default 443 for NAT traversal)
     let config = `[Interface]
 Address = 10.13.13.1/24
-ListenPort = 51820
+ListenPort = ${WG_LISTEN_PORT}
 PrivateKey = ${privateKey}
-MTU = 1380
+MTU = 1420
 PostUp = ${postUpRules}
 PostDown = ${postDownRules}
 

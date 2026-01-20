@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { redeemEnrollmentKey } from '$lib/server/agents';
+import { getServerPublicKey } from '$lib/server/wireguard';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
@@ -19,6 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
 
         const { agent, peer } = result;
+        const serverPublicKey = await getServerPublicKey();
 
         return json({
             token: agent.token,
@@ -26,10 +28,10 @@ export const POST: RequestHandler = async ({ request }) => {
             name: agent.name,
             // WireGuard Config
             wgPrivateKey: peer?.privateKey,
-            wgAddress: peer?.allowedIps.split('/')[0], // Client usually wants just the IP
-            wgEndpoint: env.SERVER_ENDPOINT || 'vpn.example.com:51820',
-            wgPublicKey: env.WG_SERVER_PUBLIC_KEY || 'SERVER_PUB_KEY_PLACEHOLDER', // In real app, read from server.pub
-            wgAllowedIps: '10.13.13.0/24' // Default to VPN subnet routing? Or specific?
+            wgAddress: peer?.allowedIps, // Full CIDR notation (e.g., 10.13.13.2/32)
+            wgEndpoint: env.SERVER_ENDPOINT || 'vpn.example.com:443',
+            wgPublicKey: serverPublicKey,
+            wgAllowedIps: '10.13.13.0/24' // VPN subnet routing
         });
     } catch (e) {
         console.error('Enrollment error:', e);

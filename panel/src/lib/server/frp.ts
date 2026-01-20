@@ -44,10 +44,10 @@ export const saveProxies = async (proxies: ProxyRule[]) => {
     const peers = await getPeers();
     await wgSyncConfig(peers);
 
-    // Sync Firewall
+    // Sync Firewall with correct protocols
     for (const proxy of proxies) {
         try {
-            await allowPort(proxy.bindPort, `FRP: ${proxy.name}`);
+            await allowPort(proxy.bindPort, `FRP: ${proxy.name}`, proxy.type);
         } catch (e) {
             console.error(`[FRP] Failed to allow port ${proxy.bindPort}`, e);
         }

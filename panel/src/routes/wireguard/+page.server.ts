@@ -1,13 +1,28 @@
 import { fail } from '@sveltejs/kit';
-import { getPeers, savePeers, createPeer } from '$lib/server/wireguard';
+import { getPeers, savePeers, createPeer, getServerPublicKey } from '$lib/server/wireguard';
+import { getAgents } from '$lib/server/agents';
+import { env } from '$env/dynamic/private';
 
 export const load = async () => {
     const peers = await getPeers();
+    const agents = await getAgents();
+    const serverPublicKey = await getServerPublicKey();
+
+    // Enrich peers with agent info
+    const enrichedPeers = peers.map(peer => {
+        const linkedAgent = agents.find(a => a.wgPeerId === peer.id);
+        return {
+            ...peer,
+            linkedAgentId: linkedAgent?.id,
+            linkedAgentName: linkedAgent?.name,
+            isDevice: !linkedAgent // True if this is a standalone device (not linked to an agent)
+        };
+    });
+
     return {
-        peers,
-        // In a real app, we'd fetch this or have it in settings
-        serverEndpoint: process.env.SERVER_ENDPOINT || 'vpn.example.com:51820',
-        serverPublicKey: process.env.WG_SERVER_PUBLIC_KEY || 'SERVER_PUB_KEY_PLACEHOLDER'
+        peers: enrichedPeers,
+        serverEndpoint: env.SERVER_ENDPOINT || 'vpn.example.com:443',
+        serverPublicKey
     };
 };
 

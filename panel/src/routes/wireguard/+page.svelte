@@ -59,7 +59,14 @@ PersistentKeepalive = 25`;
             <div class="flex items-center gap-4">
                 <div class={`w-3 h-3 rounded-full ${peer.enabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 <div>
-                    <h4 class="font-bold text-gray-900 dark:text-white">{peer.name}</h4>
+                    <div class="flex items-center gap-2">
+                        <h4 class="font-bold text-gray-900 dark:text-white">{peer.name}</h4>
+                        {#if peer.isDevice}
+                            <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full">Device</span>
+                        {:else}
+                            <span class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 rounded-full">Agent</span>
+                        {/if}
+                    </div>
                     <p class="text-sm text-gray-500 font-mono">{peer.allowedIps}</p>
                 </div>
             </div>

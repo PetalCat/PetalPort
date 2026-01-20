@@ -91,21 +91,27 @@
     {#each data.proxies as proxy (proxy.id)}
         <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 text-purple-600 font-bold text-xs uppercase">
+                <div class="flex items-center justify-center w-10 h-10 rounded-lg {proxy.type === 'udp' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'} font-bold text-xs uppercase">
                     {proxy.type}
                 </div>
                 <div>
                     <h4 class="font-bold text-gray-900 dark:text-white">{proxy.name}</h4>
-                    <p class="text-sm text-gray-500 font-mono">Port: {proxy.bindPort} {proxy.agentId ? `• Agent: ${data.agents.find(a => a.id === proxy.agentId)?.name || 'Unknown'}` : ''}</p>
+                    <p class="text-sm text-gray-500 font-mono">
+                        Port: {proxy.bindPort}
+                        {proxy.agentId ? `• Agent: ${data.agents.find(a => a.id === proxy.agentId)?.name || 'Unknown'}` : ''}
+                        {#if proxy.type === 'udp'}
+                            <span class="text-green-600 dark:text-green-400"> • WireGuard</span>
+                        {/if}
+                    </p>
                 </div>
             </div>
-            
+
             <div class="flex items-center gap-3">
-                
+
                 <button onclick={() => openMigrate(proxy.id, proxy.name)} class="text-gray-500 hover:text-blue-600 mr-2" title="Migrate" aria-label="Migrate">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                 </button>
-                
+
                 <form method="POST" action="?/delete" use:enhance class="inline">
                     <input type="hidden" name="id" value={proxy.id} />
                     <button type="submit" class="text-gray-500 hover:text-red-600" title="Delete" aria-label="Delete">
@@ -116,6 +122,45 @@
         </div>
     {/each}
 </div>
+
+<!-- Migrate Modal -->
+{#if showMigrateModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick={() => showMigrateModal = false}>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl max-w-md w-full mx-4" onclick={(e) => e.stopPropagation()}>
+            <h3 class="text-lg font-semibold mb-4 dark:text-white">Migrate Tunnel</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">Move <strong>{migrateProxyName}</strong> to a different agent:</p>
+
+            <form method="POST" action="?/migrate" use:enhance={() => {
+                return async ({ result, update }) => {
+                    if (result.type === 'success') {
+                        showMigrateModal = false;
+                    }
+                    await update();
+                };
+            }}>
+                <input type="hidden" name="id" value={migrateProxyId} />
+
+                <select name="agentId" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none mb-4">
+                    <option value="" disabled selected>Select target agent</option>
+                    {#each data.agents as agent}
+                        <option value={agent.id}>{agent.name} ({agent.status})</option>
+                    {/each}
+                </select>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick={() => showMigrateModal = false} class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors">
+                        Migrate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{/if}
 
 
 

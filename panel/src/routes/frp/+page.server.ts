@@ -46,9 +46,9 @@ export const actions = {
         proxies.push(newProxy);
         await saveProxies(proxies);
 
-        // Open firewall port
+        // Open firewall port with correct protocol
         try {
-            await allowPort(bindPort, `FRP: ${name}`);
+            await allowPort(bindPort, `FRP: ${name}`, type);
         } catch (e: any) {
             console.error('Firewall failed:', e);
             // Revert changes
@@ -68,8 +68,8 @@ export const actions = {
         const toDelete = proxies.find(p => p.id === id);
 
         if (toDelete) {
-            // Close firewall port
-            await denyPort(toDelete.bindPort);
+            // Close firewall port with correct protocol
+            await denyPort(toDelete.bindPort, toDelete.type);
         }
 
         proxies = proxies.filter(p => p.id !== id);

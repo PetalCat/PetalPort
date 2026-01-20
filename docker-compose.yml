@@ -13,6 +13,9 @@ services:
       - HOST=0.0.0.0
       - PORT=8456
       - FRP_DASHBOARD_URL=http://172.17.0.1:7500
+      # WireGuard endpoint - update this to your server's public IP/hostname
+      - SERVER_ENDPOINT=${SERVER_ENDPOINT:-host.docker.internal:443}
+      - WG_LISTEN_PORT=${WG_LISTEN_PORT:-443}
     # privileged: true (CRIT-04: Reduced to specific caps)
     cap_add:
       - NET_ADMIN
@@ -43,19 +46,17 @@ services:
     volumes:
       - ./config/wireguard:/config
       - /lib/modules:/lib/modules
-    ports:
-      - "443:443/udp"
+    # Use host network for UDP DNAT to work with game ports
+    network_mode: host
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
     restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
-    networks:
-      - internal
-      - public
 
   frps:
     image: snowdreamtech/frps:0.59.0 # Pinned version

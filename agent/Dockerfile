@@ -2,8 +2,8 @@ FROM snowdreamtech/frpc:latest AS frpc
 
 FROM node:18-alpine
 
-# Install system dependencies if required (frpc is usually static, but ca-certificates are good)
-RUN apk add --no-cache ca-certificates
+# Install system dependencies
+RUN apk add --no-cache ca-certificates wireguard-tools iptables openresolv ip6tables
 
 # Copy frpc binary
 COPY --from=frpc /usr/bin/frpc /usr/bin/frpc
