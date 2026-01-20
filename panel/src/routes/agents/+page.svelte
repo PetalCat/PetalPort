@@ -56,10 +56,10 @@
                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         </button>
                     </div>
-                    <p class="text-xs text-gray-400 font-mono mt-1">{agent.id}</p>
+                    <p class="text-xs text-gray-400 font-mono mt-1">{agent.id.slice(0, 8)}...</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <div class={`px-2 py-1 text-xs font-bold rounded-full ${agent.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                    <div class={`px-2 py-1 text-xs font-bold rounded-full ${agent.status === 'online' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
                         {agent.status}
                     </div>
                     <form method="POST" action="?/delete" use:enhance class="inline">
@@ -70,7 +70,57 @@
                     </form>
                 </div>
             </div>
-            
+
+            <!-- WireGuard & Tunnel Status -->
+            {#if agent.status === 'online'}
+                <div class="flex items-center gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <!-- WireGuard Status -->
+                    <div class="flex items-center gap-2" title="WireGuard Status">
+                        <svg class="w-4 h-4 {agent.wgStatus === 'up' ? 'text-green-500' : 'text-gray-400'}" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-xs font-medium {agent.wgStatus === 'up' ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}">
+                            WG {agent.wgStatus === 'up' ? 'Up' : agent.wgStatus === 'down' ? 'Down' : '?'}
+                        </span>
+                    </div>
+
+                    <span class="text-gray-300 dark:text-gray-600">|</span>
+
+                    <!-- Tunnel Counts -->
+                    <div class="flex items-center gap-3">
+                        {#if agent.tunnels?.tcp > 0}
+                            <span class="flex items-center gap-1 text-xs">
+                                <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                                <span class="text-gray-600 dark:text-gray-300">{agent.tunnels.tcp} TCP</span>
+                            </span>
+                        {/if}
+                        {#if agent.tunnels?.udp > 0}
+                            <span class="flex items-center gap-1 text-xs">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-gray-600 dark:text-gray-300">{agent.tunnels.udp} UDP</span>
+                            </span>
+                        {/if}
+                        {#if (!agent.tunnels?.tcp && !agent.tunnels?.udp)}
+                            <span class="text-xs text-gray-400">No tunnels</span>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- UDP Forward Status (when online and has UDP tunnels) -->
+            {#if agent.status === 'online' && agent.udpForwards && agent.udpForwards.length > 0}
+                <div class="mb-4 space-y-1">
+                    {#each agent.udpForwards as fwd, i (fwd.listenPort)}
+                        <div class="flex items-center justify-between text-xs p-2 rounded {fwd.active ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}">
+                            <span class="font-mono text-gray-600 dark:text-gray-300">:{fwd.listenPort} → {fwd.localIp}:{fwd.localPort}</span>
+                            <span class={fwd.active ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                                {fwd.active ? 'Active' : 'Failed'}
+                            </span>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+
             <div class="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                 <div class="flex justify-between">
                     <span>Host:</span>
@@ -104,6 +154,49 @@
 {#if data.agents.length === 0}
     <div class="text-center py-12 text-gray-500 font-medium">
         No agents connected yet. Click "Connect New Agent" to get started.
+    </div>
+{/if}
+
+<!-- Rename Modal -->
+{#if showRenameModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick={() => showRenameModal = false}>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl max-w-md w-full mx-4" onclick={(e) => e.stopPropagation()}>
+            <h3 class="text-lg font-semibold mb-4 dark:text-white">Rename Agent</h3>
+
+            <form method="POST" action="?/rename" use:enhance={() => {
+                return async ({ result, update }) => {
+                    if (result.type === 'success') {
+                        showRenameModal = false;
+                    }
+                    await update();
+                };
+            }}>
+                <input type="hidden" name="id" value={renameAgentId} />
+
+                <div class="mb-4">
+                    <label for="agentName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Agent Name</label>
+                    <input
+                        id="agentName"
+                        type="text"
+                        name="name"
+                        value={renameAgentName}
+                        required
+                        class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick={() => showRenameModal = false} class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 {/if}
 

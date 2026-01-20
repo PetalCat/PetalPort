@@ -1,9 +1,12 @@
 const fs = require('fs');
 const axios = require('axios');
 const EventSource = require('eventsource');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execSync } = require('child_process');
 const path = require('path');
 const nacl = require('tweetnacl');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
 
 // Configuration
 const PANEL_URL = process.env.PANEL_URL || 'http://localhost:8456';
@@ -13,15 +16,29 @@ const CONFIG_PATH = process.env.CONFIG_PATH || '/etc/frp/frpc.ini';
 const TOKEN_FILE = process.env.TOKEN_FILE || '/data/agent_token';
 const WG_KEY_FILE = process.env.WG_KEY_FILE || '/data/wg_private.key';
 const WG_CONF_FILE = process.env.WG_CONF_FILE || '/etc/wireguard/wg0.conf';
+const AGENT_VERSION = '1.0.0';
 
 // State
 let agentToken = null;
 let agentId = null;
 let frpcProcess = null;
 let wgInterfaceUp = false;
-let currentUdpForwards = []; // Track current UDP forwarding rules
+
+// UDP forwarding state with status tracking
+let currentUdpForwards = []; // { name, listenPort, localIp, localPort, active, error? }
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper to safely execute iptables commands
+async function iptables(args) {
+    const cmd = `iptables ${args}`;
+    try {
+        await execAsync(cmd);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.stderr || e.message };
+    }
+}
 
 async function main() {
     console.log(`[Wrapper] Starting PetalPort Agent...`);
@@ -219,86 +236,112 @@ async function updateUdpForwards() {
 
         const newForwards = res.data.forwards || [];
 
-        // Remove old rules that are no longer needed
-        for (const oldFwd of currentUdpForwards) {
-            const stillExists = newForwards.some(
-                f => f.listenPort === oldFwd.listenPort && f.localIp === oldFwd.localIp && f.localPort === oldFwd.localPort
-            );
-            if (!stillExists) {
+        // Build a map of current forwards by key for quick lookup
+        const currentMap = new Map(currentUdpForwards.map(f => [forwardKey(f), f]));
+        const newMap = new Map(newForwards.map(f => [forwardKey(f), f]));
+
+        // Remove rules that are no longer needed
+        for (const [key, oldFwd] of currentMap) {
+            if (!newMap.has(key)) {
                 await removeUdpForward(oldFwd);
             }
         }
 
-        // Add new rules
+        // Add new rules (with status tracking)
+        const updatedForwards = [];
         for (const newFwd of newForwards) {
-            const alreadyExists = currentUdpForwards.some(
-                f => f.listenPort === newFwd.listenPort && f.localIp === newFwd.localIp && f.localPort === newFwd.localPort
-            );
-            if (!alreadyExists) {
-                await addUdpForward(newFwd);
+            const key = forwardKey(newFwd);
+            const existing = currentMap.get(key);
+
+            if (existing && existing.active) {
+                // Keep existing active forward
+                updatedForwards.push(existing);
+            } else {
+                // Add new forward
+                const result = await addUdpForward(newFwd);
+                updatedForwards.push({
+                    ...newFwd,
+                    active: result.success,
+                    error: result.error
+                });
             }
         }
 
-        currentUdpForwards = newForwards;
-        console.log(`[Wrapper] UDP forwards: ${newForwards.length} active`);
+        currentUdpForwards = updatedForwards;
+        const activeCount = updatedForwards.filter(f => f.active).length;
+        console.log(`[Wrapper] UDP forwards: ${activeCount}/${updatedForwards.length} active`);
     } catch (e) {
         console.error('[Wrapper] Failed to update UDP forwards:', e.message);
     }
 }
 
+function forwardKey(fwd) {
+    return `${fwd.listenPort}:${fwd.localIp}:${fwd.localPort}`;
+}
+
 async function addUdpForward(fwd) {
     console.log(`[Wrapper] Adding UDP forward: wg0:${fwd.listenPort} -> ${fwd.localIp}:${fwd.localPort}`);
+    const errors = [];
 
-    // Enable IP forwarding
-    exec('sysctl -w net.ipv4.ip_forward=1', (err) => {
-        if (err) console.error('[Wrapper] Failed to enable IP forwarding:', err.message);
-    });
-
-    // DNAT rule: traffic arriving on wg0 for this port -> forward to local target
-    const dnatCmd = `iptables -t nat -A PREROUTING -i wg0 -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`;
-
-    exec(dnatCmd, (err, stdout, stderr) => {
-        if (err) {
-            console.error(`[Wrapper] Failed to add DNAT rule: ${stderr}`);
-        }
-    });
-
-    // If forwarding to a non-localhost address, we need MASQUERADE for return traffic
-    if (fwd.localIp !== '127.0.0.1' && fwd.localIp !== 'localhost') {
-        const masqCmd = `iptables -t nat -A POSTROUTING -p udp -d ${fwd.localIp} --dport ${fwd.localPort} -j MASQUERADE`;
-        exec(masqCmd, (err, stdout, stderr) => {
-            if (err) {
-                console.error(`[Wrapper] Failed to add MASQUERADE rule: ${stderr}`);
-            }
-        });
+    // Enable IP forwarding (do this once, ignore if already enabled)
+    try {
+        await execAsync('sysctl -w net.ipv4.ip_forward=1');
+    } catch (e) {
+        console.warn('[Wrapper] IP forwarding might already be enabled');
     }
 
-    // Allow forwarded traffic
-    const fwdCmd = `iptables -A FORWARD -i wg0 -p udp --dport ${fwd.listenPort} -j ACCEPT`;
-    exec(fwdCmd, (err) => {
-        if (err) console.error('[Wrapper] Failed to add FORWARD rule');
-    });
+    // DNAT rule: traffic arriving on wg0 for this port -> forward to local target
+    const dnatResult = await iptables(
+        `-t nat -A PREROUTING -i wg0 -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`
+    );
+    if (!dnatResult.success) {
+        errors.push(`DNAT: ${dnatResult.error}`);
+    }
+
+    // For localhost, we also need to handle locally-generated traffic going to wg0 IP
+    // Add OUTPUT chain rule for traffic from local processes
+    if (fwd.localIp === '127.0.0.1' || fwd.localIp === 'localhost') {
+        // Also add to OUTPUT chain for locally-initiated traffic
+        await iptables(
+            `-t nat -A OUTPUT -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`
+        );
+    } else {
+        // If forwarding to a non-localhost address, we need MASQUERADE for return traffic
+        const masqResult = await iptables(
+            `-t nat -A POSTROUTING -p udp -d ${fwd.localIp} --dport ${fwd.localPort} -j MASQUERADE`
+        );
+        if (!masqResult.success) {
+            errors.push(`MASQ: ${masqResult.error}`);
+        }
+    }
+
+    if (errors.length > 0) {
+        const errorMsg = errors.join('; ');
+        console.error(`[Wrapper] UDP forward setup had issues: ${errorMsg}`);
+        return { success: false, error: errorMsg };
+    }
+
+    console.log(`[Wrapper] UDP forward active: wg0:${fwd.listenPort} -> ${fwd.localIp}:${fwd.localPort}`);
+    return { success: true };
 }
 
 async function removeUdpForward(fwd) {
     console.log(`[Wrapper] Removing UDP forward: wg0:${fwd.listenPort} -> ${fwd.localIp}:${fwd.localPort}`);
 
-    const dnatCmd = `iptables -t nat -D PREROUTING -i wg0 -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`;
-    exec(dnatCmd, (err) => {
-        if (err) console.error('[Wrapper] Failed to remove DNAT rule (may not exist)');
-    });
+    // Remove DNAT rule
+    await iptables(
+        `-t nat -D PREROUTING -i wg0 -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`
+    );
 
-    if (fwd.localIp !== '127.0.0.1' && fwd.localIp !== 'localhost') {
-        const masqCmd = `iptables -t nat -D POSTROUTING -p udp -d ${fwd.localIp} --dport ${fwd.localPort} -j MASQUERADE`;
-        exec(masqCmd, (err) => {
-            if (err) console.error('[Wrapper] Failed to remove MASQUERADE rule (may not exist)');
-        });
+    if (fwd.localIp === '127.0.0.1' || fwd.localIp === 'localhost') {
+        await iptables(
+            `-t nat -D OUTPUT -p udp --dport ${fwd.listenPort} -j DNAT --to-destination ${fwd.localIp}:${fwd.localPort}`
+        );
+    } else {
+        await iptables(
+            `-t nat -D POSTROUTING -p udp -d ${fwd.localIp} --dport ${fwd.localPort} -j MASQUERADE`
+        );
     }
-
-    const fwdCmd = `iptables -D FORWARD -i wg0 -p udp --dport ${fwd.listenPort} -j ACCEPT`;
-    exec(fwdCmd, (err) => {
-        if (err) console.error('[Wrapper] Failed to remove FORWARD rule (may not exist)');
-    });
 }
 
 function startFrpc() {
@@ -371,23 +414,39 @@ function startSSE() {
 }
 
 function startHeartbeat() {
-    setInterval(async () => {
-        try {
-            const stats = await getTrafficStats();
+    // Send initial status immediately
+    sendHeartbeat();
 
-            await axios.post(`${PANEL_URL}/api/agent/status`, {
-                status: 'online',
-                meta: {
-                    uptime: process.uptime()
-                },
-                stats
-            }, {
-                headers: { 'Authorization': `Bearer ${agentToken}` }
-            });
-        } catch (e) {
-            // silent fail
-        }
-    }, 30000); // 30s
+    // Then send every 30 seconds
+    setInterval(sendHeartbeat, 30000);
+}
+
+async function sendHeartbeat() {
+    try {
+        const stats = await getTrafficStats();
+
+        await axios.post(`${PANEL_URL}/api/agent/status`, {
+            status: 'online',
+            meta: {
+                uptime: process.uptime(),
+                version: AGENT_VERSION
+            },
+            stats,
+            wgStatus: wgInterfaceUp ? 'up' : 'down',
+            udpForwards: currentUdpForwards.map(f => ({
+                name: f.name,
+                listenPort: f.listenPort,
+                localIp: f.localIp,
+                localPort: f.localPort,
+                active: f.active,
+                error: f.error
+            }))
+        }, {
+            headers: { 'Authorization': `Bearer ${agentToken}` }
+        });
+    } catch (e) {
+        // silent fail
+    }
 }
 
 async function getTrafficStats() {

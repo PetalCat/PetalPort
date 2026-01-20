@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { validateAgentToken, updateAgentStatus } from '$lib/server/agents';
+import { validateAgentToken, updateAgentStatus, type UdpForwardStatus } from '$lib/server/agents';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -17,9 +17,16 @@ export const POST: RequestHandler = async ({ request }) => {
 
     try {
         const body = await request.json();
-        const { status, meta } = body;
+        const { status, meta, stats, wgStatus, udpForwards } = body;
 
-        await updateAgentStatus(agent.id, status || 'online', meta);
+        await updateAgentStatus(
+            agent.id,
+            status || 'online',
+            meta,
+            stats,
+            wgStatus as 'up' | 'down' | 'unknown' | undefined,
+            udpForwards as UdpForwardStatus[] | undefined
+        );
 
         return json({ success: true });
     } catch (e) {

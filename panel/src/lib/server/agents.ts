@@ -8,6 +8,15 @@ const CONFIG_ROOT = env.CONFIG_ROOT || '/config';
 const AGENTS_FILE = path.join(CONFIG_ROOT, 'agents.json');
 const ENROLL_KEYS_FILE = path.join(CONFIG_ROOT, 'enrollment_keys.json');
 
+export interface UdpForwardStatus {
+    name: string;
+    listenPort: number;
+    localIp: string;
+    localPort: number;
+    active: boolean;
+    error?: string;
+}
+
 export interface Agent {
     id: string;
     name: string;
@@ -18,6 +27,7 @@ export interface Agent {
         hostname?: string;
         arch?: string;
         version?: string;
+        uptime?: number;
     };
     configHash?: string; // Hash of last pushed config
     stats?: {
@@ -25,6 +35,8 @@ export interface Agent {
         tx: number; // bytes sent
     };
     wgPeerId?: string; // Linked WireGuard Peer ID
+    wgStatus?: 'up' | 'down' | 'unknown';
+    udpForwards?: UdpForwardStatus[];
 }
 
 interface EnrollmentKey {
@@ -137,7 +149,14 @@ export const validateAgentToken = async (token: string): Promise<Agent | null> =
     return agents.find(a => a.token === token) || null;
 };
 
-export const updateAgentStatus = async (id: string, status: 'online' | 'offline', meta?: Agent['meta'], stats?: Agent['stats']) => {
+export const updateAgentStatus = async (
+    id: string,
+    status: 'online' | 'offline',
+    meta?: Agent['meta'],
+    stats?: Agent['stats'],
+    wgStatus?: Agent['wgStatus'],
+    udpForwards?: UdpForwardStatus[]
+) => {
     const agents = await getAgents();
     const agent = agents.find(a => a.id === id);
     if (agent) {
@@ -145,6 +164,8 @@ export const updateAgentStatus = async (id: string, status: 'online' | 'offline'
         agent.lastSeen = new Date().toISOString();
         if (meta) agent.meta = { ...agent.meta, ...meta };
         if (stats) agent.stats = stats;
+        if (wgStatus) agent.wgStatus = wgStatus;
+        if (udpForwards !== undefined) agent.udpForwards = udpForwards;
         await saveAgents(agents);
     }
 };

@@ -1,12 +1,30 @@
 import { getAgents, createEnrollmentKey, saveAgents, renameAgent } from '$lib/server/agents';
-import { deleteProxiesForAgent } from '$lib/server/frp';
+import { deleteProxiesForAgent, getProxies } from '$lib/server/frp';
 import { emitToAgent } from '$lib/server/sse';
 import { fail } from '@sveltejs/kit';
 
 export const load = async () => {
     const agents = await getAgents();
+    const proxies = await getProxies();
+
+    // Enrich agents with tunnel counts
+    const enrichedAgents = agents.map(agent => {
+        const agentProxies = proxies.filter(p => p.agentId === agent.id);
+        const tcpCount = agentProxies.filter(p => p.type === 'tcp').length;
+        const udpCount = agentProxies.filter(p => p.type === 'udp').length;
+
+        return {
+            ...agent,
+            tunnels: {
+                tcp: tcpCount,
+                udp: udpCount,
+                total: tcpCount + udpCount
+            }
+        };
+    });
+
     return {
-        agents
+        agents: enrichedAgents
     };
 };
 
