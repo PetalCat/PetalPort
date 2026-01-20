@@ -1,5 +1,5 @@
 import { getProxies, syncConfig as syncFrp } from '$lib/server/frp';
-import { getPeers, syncConfig as syncWg, ensureIdentity } from '$lib/server/wireguard';
+import { getPeers, syncConfig as syncWg, ensureIdentity, ensureWireguardConfig } from '$lib/server/wireguard';
 import fs from 'node:fs/promises';
 import { chmod } from 'node:fs/promises';
 import path from 'node:path';
@@ -69,6 +69,9 @@ const init = async () => {
     }
 
     console.log('[PetalPort] Verified frps.toml and Firewall');
+
+    // Ensure WireGuard config exists FIRST (prevents linuxserver image from generating problematic config)
+    await ensureWireguardConfig();
 
     // Sync WG
     const peers = await getPeers();

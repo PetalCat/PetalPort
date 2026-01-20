@@ -179,8 +179,9 @@ export const syncConfig = async (peers: Peer[]) => {
 
     // Generate DNAT rules for UDP proxies
     // Using host network, so we need to specify the correct outbound interface
-    let postUpRules = 'iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.13.13.0/24 -j MASQUERADE';
-    let postDownRules = 'iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.13.13.0/24 -j MASQUERADE';
+    // IMPORTANT: Use -o eth0 to avoid affecting other interfaces (prevents SSH breakage)
+    let postUpRules = 'iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.13.13.0/24 -o eth0 -j MASQUERADE';
+    let postDownRules = 'iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.13.13.0/24 -o eth0 -j MASQUERADE';
 
     for (const proxy of proxies) {
         if (proxy.type !== 'udp') continue;
@@ -243,4 +244,37 @@ PersistentKeepalive = 25
     } catch (e) {
         console.error('[PetalPort] Failed to restart WireGuard container:', e);
     }
+};
+
+/**
+ * Ensure WireGuard config exists on panel startup.
+ * Creates a safe initial config if none exists to prevent the linuxserver/wireguard
+ * image from generating its own config with potentially problematic iptables rules.
+ */
+export const ensureWireguardConfig = async (): Promise<void> => {
+    try {
+        await fs.access(WG_CONF_FILE);
+        console.log('[WireGuard] Config already exists');
+        return;
+    } catch {
+        // Config doesn't exist, create it
+    }
+
+    console.log('[WireGuard] Creating initial config...');
+    await fs.mkdir(WG_CONFS_DIR, { recursive: true });
+
+    const privateKey = await ensureServerKey();
+
+    // Create a minimal safe config - do NOT restart container here as it may not be running yet
+    const config = `[Interface]
+Address = 10.13.13.1/24
+ListenPort = ${WG_LISTEN_PORT}
+PrivateKey = ${privateKey}
+MTU = 1420
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.13.13.0/24 -o eth0 -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.13.13.0/24 -o eth0 -j MASQUERADE
+
+`;
+    await fs.writeFile(WG_CONF_FILE, config);
+    console.log('[WireGuard] Created initial config at', WG_CONF_FILE);
 };
