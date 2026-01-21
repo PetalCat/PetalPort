@@ -1,6 +1,7 @@
 <script lang="ts">
     import { enhance } from '$app/forms';
     import type { PageData, ActionData } from './$types';
+    import { toast } from '$lib/stores/toast';
 
     let { data, form }: { data: PageData, form: ActionData } = $props();
 
@@ -18,8 +19,23 @@
         showMigrateModal = true;
     };
 
+    // Edit modal state
+    let showEditModal = $state(false);
+    let editProxy = $state<{ id: string; name: string; localIp: string; localPort: number; bindPort: number; type: string } | null>(null);
+
+    const openEdit = (proxy: typeof editProxy) => {
+        editProxy = proxy ? { ...proxy } : null;
+        showEditModal = true;
+    };
+
     // Advanced options toggle
     let showAdvanced = $state(false);
+
+    // Loading states
+    let isCreating = $state(false);
+    let deletingId = $state<string | null>(null);
+    let isMigrating = $state(false);
+    let isEditing = $state(false);
 
     // Helper to get status color and icon for UDP forwards
     function getUdpStatusInfo(proxy: any) {
@@ -54,7 +70,18 @@
 {/if}
 
 <!-- Add Proxy Form -->
-<form method="POST" action="?/create" use:enhance class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-8 border border-gray-200 dark:border-gray-700">
+<form method="POST" action="?/create" use:enhance={() => {
+    isCreating = true;
+    return async ({ result, update }) => {
+        isCreating = false;
+        if (result.type === 'success') {
+            toast.success('Tunnel created successfully');
+        } else if (result.type === 'failure') {
+            toast.error(String(result.data?.error || 'Failed to create tunnel'));
+        }
+        await update();
+    };
+}} class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm mb-8 border border-gray-200 dark:border-gray-700">
     <h3 class="text-lg font-semibold mb-4 dark:text-white">New Tunnel</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end mb-4">
         <div>
@@ -121,8 +148,13 @@
                 Traffic to <span class="font-mono text-purple-600 dark:text-purple-400">server:&lbrace;bindPort&rbrace;</span> will be forwarded to <span class="font-mono text-green-600 dark:text-green-400">&lbrace;serviceAddress&rbrace;</span> on the agent's network.
             </p>
         </div>
-        <button type="submit" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors h-fit">
-            Create Tunnel
+        <button type="submit" disabled={isCreating} class="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium rounded-lg transition-colors h-fit flex items-center gap-2">
+            {#if isCreating}
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                Creating...
+            {:else}
+                Create Tunnel
+            {/if}
         </button>
     </div>
 </form>
@@ -193,14 +225,33 @@
 
                     <!-- Actions -->
                     <div class="flex items-center gap-2">
+                        <button onclick={() => openEdit(proxy)} class="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors" title="Edit tunnel">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+
                         <button onclick={() => openMigrate(proxy.id, proxy.name)} class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Migrate to another agent">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                         </button>
 
-                        <form method="POST" action="?/delete" use:enhance class="inline">
+                        <form method="POST" action="?/delete" use:enhance={() => {
+                            deletingId = proxy.id;
+                            return async ({ result, update }) => {
+                                deletingId = null;
+                                if (result.type === 'success') {
+                                    toast.success(`Tunnel "${proxy.name}" deleted`);
+                                } else if (result.type === 'failure') {
+                                    toast.error(String(result.data?.error || 'Failed to delete tunnel'));
+                                }
+                                await update();
+                            };
+                        }} class="inline">
                             <input type="hidden" name="id" value={proxy.id} />
-                            <button type="submit" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete tunnel">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            <button type="submit" disabled={deletingId === proxy.id} class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50" title="Delete tunnel">
+                                {#if deletingId === proxy.id}
+                                    <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                                {:else}
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                {/if}
                             </button>
                         </form>
                     </div>
@@ -227,9 +278,14 @@
             <p class="text-gray-600 dark:text-gray-400 mb-4">Move <strong>{migrateProxyName}</strong> to a different agent:</p>
 
             <form method="POST" action="?/migrate" use:enhance={() => {
+                isMigrating = true;
                 return async ({ result, update }) => {
+                    isMigrating = false;
                     if (result.type === 'success') {
                         showMigrateModal = false;
+                        toast.success(`Tunnel "${migrateProxyName}" migrated successfully`);
+                    } else if (result.type === 'failure') {
+                        toast.error(String(result.data?.error || 'Failed to migrate tunnel'));
                     }
                     await update();
                 };
@@ -247,8 +303,107 @@
                     <button type="button" onclick={() => showMigrateModal = false} class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                         Cancel
                     </button>
-                    <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors">
-                        Migrate
+                    <button type="submit" disabled={isMigrating} class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        {#if isMigrating}
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                            Migrating...
+                        {:else}
+                            Migrate
+                        {/if}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{/if}
+
+<!-- Edit Modal -->
+{#if showEditModal && editProxy}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick={() => showEditModal = false}>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl max-w-lg w-full mx-4" onclick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold dark:text-white">Edit Tunnel</h3>
+                <span class="px-2 py-1 text-xs font-bold rounded {editProxy.type === 'udp' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'} uppercase">
+                    {editProxy.type}
+                </span>
+            </div>
+
+            <form method="POST" action="?/edit" use:enhance={() => {
+                isEditing = true;
+                return async ({ result, update }) => {
+                    isEditing = false;
+                    if (result.type === 'success') {
+                        showEditModal = false;
+                        toast.success('Tunnel updated successfully');
+                        editProxy = null;
+                    } else if (result.type === 'failure') {
+                        toast.error(String(result.data?.error || 'Failed to update tunnel'));
+                    }
+                    await update();
+                };
+            }}>
+                <input type="hidden" name="id" value={editProxy.id} />
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="editName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                        <input
+                            id="editName"
+                            type="text"
+                            name="name"
+                            value={editProxy.name}
+                            required
+                            class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        />
+                    </div>
+
+                    <div>
+                        <label for="editLocalAddress" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Service Address
+                            <span class="text-gray-400 text-xs ml-1">(on agent)</span>
+                        </label>
+                        <input
+                            id="editLocalAddress"
+                            type="text"
+                            name="localAddress"
+                            value="{editProxy.localIp}:{editProxy.localPort}"
+                            required
+                            placeholder="127.0.0.1:25565"
+                            class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm"
+                        />
+                    </div>
+
+                    <div>
+                        <label for="editBindPort" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Public Port
+                            <span class="text-gray-400 text-xs ml-1">(on server)</span>
+                        </label>
+                        <input
+                            id="editBindPort"
+                            type="number"
+                            name="bindPort"
+                            value={editProxy.bindPort}
+                            required
+                            min="1"
+                            max="65535"
+                            class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        />
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick={() => { showEditModal = false; editProxy = null; }} class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" disabled={isEditing} class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        {#if isEditing}
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                            Saving...
+                        {:else}
+                            Save Changes
+                        {/if}
                     </button>
                 </div>
             </form>

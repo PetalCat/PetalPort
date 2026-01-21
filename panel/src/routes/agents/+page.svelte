@@ -1,26 +1,29 @@
 <script lang="ts">
     import { enhance } from '$app/forms';
     import type { PageData, ActionData } from './$types';
+    import { toast } from '$lib/stores/toast';
 
     let { data, form }: { data: PageData, form: ActionData } = $props();
-    
+
     let showEnrollModal = $state(false);
     let enrollmentKey = $state('');
 
     const openEnroll = () => {
         showEnrollModal = true;
     };
-    
+
     // React to form success
     $effect(() => {
         if (form?.success && form?.key) {
             enrollmentKey = form.key;
-            showEnrollModal = true; // Ensure modal is open if action returns key
+            showEnrollModal = true;
+            toast.success('Enrollment key generated');
         }
     });
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
+        toast.info('Copied to clipboard');
     };
 
     let showRenameModal = $state(false);
@@ -32,14 +35,33 @@
         renameAgentName = currentName;
         showRenameModal = true;
     };
+
+    // Loading states
+    let isCreatingKey = $state(false);
+    let deletingId = $state<string | null>(null);
+    let isRenaming = $state(false);
 </script>
 
 <div class="flex justify-between items-center mb-8">
     <h2 class="text-3xl font-bold text-gray-800 dark:text-white">Managed Agents</h2>
-    <form method="POST" action="?/createKey" use:enhance>
-        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-            Connect New Agent
+    <form method="POST" action="?/createKey" use:enhance={() => {
+        isCreatingKey = true;
+        return async ({ result, update }) => {
+            isCreatingKey = false;
+            if (result.type === 'failure') {
+                toast.error(String(result.data?.error || 'Failed to create enrollment key'));
+            }
+            await update();
+        };
+    }}>
+        <button type="submit" disabled={isCreatingKey} class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+            {#if isCreatingKey}
+                <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                Generating...
+            {:else}
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                Connect New Agent
+            {/if}
         </button>
     </form>
 </div>
@@ -62,10 +84,25 @@
                     <div class={`px-2 py-1 text-xs font-bold rounded-full ${agent.status === 'online' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
                         {agent.status}
                     </div>
-                    <form method="POST" action="?/delete" use:enhance class="inline">
+                    <form method="POST" action="?/delete" use:enhance={() => {
+                        deletingId = agent.id;
+                        return async ({ result, update }) => {
+                            deletingId = null;
+                            if (result.type === 'success') {
+                                toast.success(`Agent "${agent.name}" deleted`);
+                            } else if (result.type === 'failure') {
+                                toast.error(String(result.data?.error || 'Failed to delete agent'));
+                            }
+                            await update();
+                        };
+                    }} class="inline">
                         <input type="hidden" name="id" value={agent.id} />
-                        <button type="submit" class="text-gray-400 hover:text-red-500 p-1" title="Delete Agent">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <button type="submit" disabled={deletingId === agent.id} class="text-gray-400 hover:text-red-500 p-1 disabled:opacity-50" title="Delete Agent">
+                            {#if deletingId === agent.id}
+                                <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                            {:else}
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            {/if}
                         </button>
                     </form>
                 </div>
@@ -166,9 +203,14 @@
             <h3 class="text-lg font-semibold mb-4 dark:text-white">Rename Agent</h3>
 
             <form method="POST" action="?/rename" use:enhance={() => {
+                isRenaming = true;
                 return async ({ result, update }) => {
+                    isRenaming = false;
                     if (result.type === 'success') {
                         showRenameModal = false;
+                        toast.success('Agent renamed successfully');
+                    } else if (result.type === 'failure') {
+                        toast.error(String(result.data?.error || 'Failed to rename agent'));
                     }
                     await update();
                 };
@@ -191,8 +233,13 @@
                     <button type="button" onclick={() => showRenameModal = false} class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                         Cancel
                     </button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
-                        Save
+                    <button type="submit" disabled={isRenaming} class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        {#if isRenaming}
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                            Saving...
+                        {:else}
+                            Save
+                        {/if}
                     </button>
                 </div>
             </form>

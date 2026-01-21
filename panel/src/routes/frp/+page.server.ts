@@ -239,5 +239,97 @@ export const actions = {
         }
 
         return { success: true };
+    },
+
+    edit: async ({ request }) => {
+        const data = await request.formData();
+        const id = data.get('id') as string;
+        const name = (data.get('name') as string || '').trim();
+        const localAddress = (data.get('localAddress') as string || '').trim();
+        const bindPort = parseInt(data.get('bindPort') as string);
+
+        if (!id) {
+            return fail(400, { error: 'Tunnel ID is required' });
+        }
+
+        // Parse service address
+        const parsedAddress = parseServiceAddress(localAddress);
+        if (!parsedAddress) {
+            return fail(400, { error: 'Invalid service address. Use format: 127.0.0.1:25565 or just 25565' });
+        }
+
+        const { ip: localIp, port: localPort } = parsedAddress;
+
+        // Validate name
+        const nameError = validateName(name);
+        if (nameError) {
+            return fail(400, { error: nameError });
+        }
+
+        // Validate ports
+        const localPortError = validatePort(localPort, 'Local port');
+        if (localPortError) {
+            return fail(400, { error: localPortError });
+        }
+
+        const bindPortError = validatePort(bindPort, 'Remote port');
+        if (bindPortError) {
+            return fail(400, { error: bindPortError });
+        }
+
+        // Check for reserved server ports
+        if (RESERVED_PORTS.has(bindPort)) {
+            return fail(400, { error: `Remote port ${bindPort} is reserved for system services` });
+        }
+
+        let proxies = await getProxies();
+        const existingIndex = proxies.findIndex(p => p.id === id);
+
+        if (existingIndex === -1) {
+            return fail(404, { error: 'Tunnel not found' });
+        }
+
+        const existing = proxies[existingIndex];
+
+        // Check for bind port conflicts (same port, same protocol, different tunnel)
+        const portConflict = proxies.find(p => p.bindPort === bindPort && p.type === existing.type && p.id !== id);
+        if (portConflict) {
+            return fail(400, { error: `Port ${bindPort}/${existing.type} is already used by "${portConflict.name}"` });
+        }
+
+        // Check for name duplicates (different tunnel)
+        if (proxies.some(p => p.name.toLowerCase() === name.toLowerCase() && p.id !== id)) {
+            return fail(400, { error: `A tunnel named "${name}" already exists` });
+        }
+
+        const oldBindPort = existing.bindPort;
+        const portChanged = oldBindPort !== bindPort;
+
+        // Update the proxy
+        proxies[existingIndex] = {
+            ...existing,
+            name,
+            localIp,
+            localPort,
+            bindPort
+        };
+
+        await saveProxies(proxies);
+
+        // Update firewall if port changed
+        if (portChanged) {
+            try {
+                await denyPort(oldBindPort, existing.type);
+                await allowPort(bindPort, `FRP: ${name}`, existing.type);
+            } catch (e: any) {
+                console.error('Firewall update failed:', e);
+                // Revert changes
+                proxies[existingIndex] = existing;
+                await saveProxies(proxies);
+                return fail(500, { error: `Firewall update failed: ${e.message}` });
+            }
+        }
+
+        return { success: true };
     }
 };

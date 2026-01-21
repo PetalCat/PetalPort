@@ -52,7 +52,7 @@ async function main() {
             const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
             agentToken = data.token;
             agentId = data.agentId;
-            console.log(`[Wrapper] creating session for agent: ${agentId}`);
+            console.log(`[Wrapper] Loaded existing token for agent: ${agentId}`);
         } catch (e) {
             console.error('[Wrapper] Failed to read token file:', e.message);
         }
@@ -80,7 +80,7 @@ async function main() {
 
     // 3. Start WireGuard
     if (fs.existsSync(WG_CONF_FILE)) {
-        startWireGuard();
+        await startWireGuard();
     }
 
     // 4. Update FRP Config
@@ -166,7 +166,7 @@ PersistentKeepalive = 25
             }
             fs.writeFileSync(WG_CONF_FILE, wgConf, { mode: 0o600 });
             console.log('[Wrapper] WireGuard config saved.');
-            startWireGuard();
+            await startWireGuard();
         }
 
     } catch (e) {
@@ -176,23 +176,29 @@ PersistentKeepalive = 25
     }
 }
 
-function startWireGuard() {
+async function startWireGuard() {
     if (wgInterfaceUp) return;
     console.log('[Wrapper] Starting WireGuard...');
 
-    // wg-quick up wg0
-    exec(`wg-quick up ${WG_CONF_FILE}`, async (err, stdout, stderr) => {
-        if (err) {
-            console.error('[Wrapper] Failed to start WireGuard:', stderr);
-            // Don't exit, maybe temporary?
-        } else {
-            console.log('[Wrapper] WireGuard interface started.');
-            wgInterfaceUp = true;
-
-            // Initialize UDP forwarding rules after WG is up
-            await updateUdpForwards();
+    try {
+        // First, try to bring down any existing wg0 interface (from previous run)
+        try {
+            await execAsync(`wg-quick down wg0`);
+            console.log('[Wrapper] Brought down existing wg0 interface.');
+        } catch (e) {
+            // Ignore - interface might not exist
         }
-    });
+
+        // Now bring up the interface
+        await execAsync(`wg-quick up ${WG_CONF_FILE}`);
+        console.log('[Wrapper] WireGuard interface started.');
+        wgInterfaceUp = true;
+
+        // Initialize UDP forwarding rules after WG is up
+        await updateUdpForwards();
+    } catch (e) {
+        console.error('[Wrapper] Failed to start WireGuard:', e.stderr || e.message);
+    }
 }
 
 async function updateConfig() {
@@ -218,7 +224,35 @@ async function updateConfig() {
         // Also update UDP forwarding rules
         await updateUdpForwards();
     } catch (e) {
+        // Handle token invalidation (401) - re-enroll if ENROLL_KEY is available
+        if (e.response?.status === 401) {
+            console.warn('[Wrapper] Token invalid (401). Clearing token and attempting re-enrollment...');
+            await handleTokenInvalidation();
+            return;
+        }
         console.error('[Wrapper] Failed to pull config:', e.message);
+    }
+}
+
+async function handleTokenInvalidation() {
+    // Clear the stale token
+    if (fs.existsSync(TOKEN_FILE)) {
+        fs.unlinkSync(TOKEN_FILE);
+        console.log('[Wrapper] Removed stale token file.');
+    }
+    agentToken = null;
+    agentId = null;
+
+    // Try to re-enroll if we have an enrollment key
+    if (ENROLL_KEY) {
+        console.log('[Wrapper] Attempting re-enrollment with ENROLL_KEY...');
+        const wgKeyPair = await ensureWgKey();
+        await enroll(wgKeyPair.publicKey);
+        // After re-enrollment, try to pull config again
+        await updateConfig();
+    } else {
+        console.error('[Wrapper] No ENROLL_KEY available for re-enrollment. Agent needs to be re-deployed with a new key.');
+        process.exit(1);
     }
 }
 
