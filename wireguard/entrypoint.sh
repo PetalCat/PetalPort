@@ -29,6 +29,12 @@ if ip link show wg0 &>/dev/null; then
     wg-quick down wg0 || true
 fi
 
+# Flush any stale UDP DNAT rules from previous runs (10.13.13.0/24 network)
+echo "[WireGuard] Cleaning up stale DNAT rules..."
+for rule in $(iptables -t nat -S PREROUTING | grep -E 'DNAT.*10\.13\.13\.' | sed 's/-A /-D /'); do
+    eval "iptables -t nat $rule" 2>/dev/null || true
+done
+
 # Start WireGuard
 wg-quick up wg0
 
