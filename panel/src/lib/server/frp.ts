@@ -128,7 +128,8 @@ webServer.password = "${dashboardPassword}"
 
 export const generateAgentConfig = async (agentId: string, serverAddr: string, serverPort: number, token?: string): Promise<string> => {
     const proxies = await getProxies();
-    const agentProxies = proxies.filter(p => p.agentId === agentId);
+    // Only include TCP proxies in FRP config - UDP proxies go through WireGuard DNAT
+    const agentProxies = proxies.filter(p => p.agentId === agentId && p.type !== 'udp');
 
     // Check if we need to include "common" section (always yes)
     let config = `[common]
